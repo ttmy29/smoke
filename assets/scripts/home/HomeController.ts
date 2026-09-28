@@ -20,6 +20,7 @@ export interface ExtractionSource {
 export class HomeController extends Component {
   public static readonly PACK_FILTER_HEIGHT = 600 * 0.52;
   private onStart: ((slotIndex: number) => void) | null = null;
+  private onSupply: (() => void) | null = null;
   private contentRoot!: Node;
   private slots: Node[] = [];
   private frontSlots: Node[] = [];
@@ -36,22 +37,35 @@ export class HomeController extends Component {
   private inventorySegments: Graphics[] = [];
   private startButton!: Button;
   private startButtonLabel!: Label;
+  private startSweep!: CanvasTexture;
+  private sweepElapsed = 0;
+  private sweepDrawElapsed = 0;
   private pack: PackSnapshot | null = null;
   private extractingSlot: number | null = null;
 
-  public initialize(onStart: (slotIndex: number) => void): void {
+  public initialize(onStart: (slotIndex: number) => void, onSupply: () => void): void {
     this.onStart = onStart;
+    this.onSupply = onSupply;
     this.build();
   }
 
-  protected update(): void {
+  protected update(deltaTime: number): void {
     this.refreshLayout();
+    if (this.startSweep && !this.entryMode && this.pack) {
+      this.sweepElapsed = (this.sweepElapsed + Math.max(0, deltaTime)) % 2.8;
+      this.sweepDrawElapsed += Math.max(0, deltaTime);
+      if (this.sweepDrawElapsed >= 1 / 30) {
+        this.sweepDrawElapsed = 0;
+        this.paintStartSweep();
+      }
+    }
   }
 
   protected onDestroy(): void {
     for (const texture of this.filterTextures) texture.dispose();
     this.filterTextures = [];
     this.backgroundTexture?.dispose();
+    this.startSweep?.dispose();
   }
 
   public refreshLayout(): void {
@@ -79,8 +93,9 @@ export class HomeController extends Component {
       segment.roundRect(-16, -3, 32, 6, 3);
       segment.fill();
     }
-    this.startButton.interactable = !!pack && remaining > 0;
-    this.startButtonLabel.string = pack === null ? '烟盒不可用' : remaining > 0 ? '来 一 根' : '本 盒 已 空';
+    this.startButton.interactable = !!pack;
+    this.startButtonLabel.string = pack === null ? '烟盒不可用' : remaining > 0 ? '来一根' : '补一盒';
+    this.paintStartSweep();
     this.refreshSlotVisibility();
   }
 
@@ -186,15 +201,57 @@ export class HomeController extends Component {
     createLabel('PackSwitchHint', this.contentRoot, '‹    王溪烟盒 · 演示    ›', 19, Palette.goldMuted, 440, 40, -145, -395);
     createLabel('Slogan', this.contentRoot, '每一次线下克制，都是在靠近更好的自己', 21, Palette.goldMuted, 620, 45, 0, -475);
 
-    this.startButton = createButton(
-      'StartButton', this.contentRoot, '来 一 根', 430, 92,
-      Palette.orange, Palette.background, 0, -560,
-      () => { if (!this.entryMode && this.defaultSlot() >= 0) this.onStart?.(this.defaultSlot()); },
-    );
-    this.startButtonLabel = this.startButton.node.getChildByName('Label')!.getComponent(Label)!;
+    const startRoot = createRect('StartButton', this.contentRoot, 470, 106,
+      '#111214', 0, -560, 0, '#4b4945');
+    this.startButton = startRoot.addComponent(Button);
+    this.startButton.transition = Button.Transition.SCALE;
+    this.startButton.zoomScale = 0.96;
+    this.startButtonLabel = createLabel('Label', startRoot, '来一根', 48,
+      '#ffe0a2', 420, 90);
+    this.startButtonLabel.enableShadow = true;
+    this.startButtonLabel.shadowColor = color('#ffac34', 85);
+    this.startButtonLabel.shadowBlur = 12;
+    this.startSweep = new CanvasTexture('StartLabelSweep', startRoot, 420, 90);
+    for (const [name, x, y] of [
+      ['TopLeft', -219, 43], ['TopRight', 219, 43],
+      ['BottomLeft', -219, -43], ['BottomRight', 219, -43],
+    ] as const) createRect(`Bolt${name}`, startRoot, 5, 5, '#8e7d59', x, y);
+    startRoot.on(Button.EventType.CLICK, () => {
+      if (this.entryMode || !this.pack) return;
+      const slot = this.defaultSlot();
+      if (slot >= 0) this.onStart?.(slot);
+      else this.onSupply?.();
+    });
     createLabel('Footer', this.contentRoot, '鼠标长按画面进行点火与吸入', 17, Palette.muted, 560, 35, 0, -650);
     this.secondaryNodes = this.contentRoot.children.filter((child) => child.name !== 'PackRoot');
     for (const node of this.secondaryNodes) this.collectSecondaryOpacity(node);
+  }
+
+  /** CSS's second text layer, with the same 2.8 s right-to-left gold sweep. */
+  private paintStartSweep(): void {
+    if (!this.startSweep || !this.startButtonLabel) return;
+    const label = this.startButtonLabel.string;
+    const phase = this.sweepElapsed / 2.8;
+    this.startSweep.redraw((ctx) => {
+      if (!this.pack) return;
+      ctx.save();
+      ctx.scale(1, -1);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '780 48px "Microsoft YaHei UI", sans-serif';
+      const center = 300 - 600 * phase;
+      const gradient = ctx.createLinearGradient(center - 105, 0, center + 105, 0);
+      gradient.addColorStop(0, 'rgba(255,251,228,0)');
+      gradient.addColorStop(0.38, 'rgba(255,251,228,0)');
+      gradient.addColorStop(0.46, '#fffbe4');
+      gradient.addColorStop(0.51, '#fff2b2');
+      gradient.addColorStop(0.55, '#ffd766');
+      gradient.addColorStop(0.63, 'rgba(255,215,102,0)');
+      gradient.addColorStop(1, 'rgba(255,215,102,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    });
   }
 
   private buildPack(): void {

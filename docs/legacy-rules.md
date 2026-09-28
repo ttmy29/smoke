@@ -73,6 +73,19 @@
 
 首页入口还有额外的业务条件：`pages/index/index.js.startGame` 在加载错误时重试，烟盒锁定时走解锁提示，库存为空时跳选盒；盒盖未开时先 `animateLid`（默认 500 ms），之后 `launchStickSession`。`startExactStick` 只接受盒盖已开且槽位可用的精确选烟；`launchStickSession` 会先在库存中预留槽位并标记忙碌，再 `beginInlineSession` 测量烟盒中的源烟位置。`handleSessionEntryClear` 在会话 Canvas 准备好后，还等待 `packFadeMs` 才显示会话场景。因此 **1350 ms 是取烟运动时长，不是从点击“来一根”到可操作画面的完整固定总时长**；盒盖动画、Canvas 就绪和淡出均可能增加等待。
 
+### 空盒入口、补盒页与广告（2026-09-28 补充审计）
+
+| 旧包方法／模板 | 静态可证实规则 |
+| --- | --- |
+| `pages/index/index.js` 的首页状态与 `startGame` | 当前盒空或剩余 ≤0 时 `startLabel="补一盒"`，点击导航到 `/pack-skins/pages/pack-select/pack-select?packId=…`，并非禁用主按钮或直接重置 10 槽。 |
+| 首页 `start-label` / `start-label-sweep`（`chunk_4.webview.js`） | 模板里并列两层同文字，扫光层 `aria-hidden=true`；底字 `#ffe0a2` 带暖色多重文字阴影，顶层 108° 透明—白金—暖金渐变，以 `start-gold-sweep 2.8s linear infinite` 将背景位置从 `140% 50%` 移到 `-40% 50%`。这是主按钮共用规则，不仅用于“补一盒”；取烟中暂停、减少动态效果时隐藏。 |
+| `pack-skins/pages/pack-select/pack-select.js.onLoad/refreshPage` | URL 带 `packId` 时进入 `mode=supply`，检查选中盒与空盒实例，显示当前盒信息、10 空位及补盒方法；不满足补盒条件则回目录模式。 |
+| `refillOrCheckIn` | 仅 `mode=supply`、未忙且可补时尝试烟票补盒；检查至少 1 张票，使用 `refill:<packInstanceId>` 交易 ID，经 `refillPackWithTicket` 成功后调用 `finishRefill`。 |
+| `engagement-action` / `finishRefill` | 广告入口 `placement="pack:refill"`、`resource-id=packInstanceId`，只在组件确认完成后触发 `finishRefill`。`finishRefill` 选中补好的盒、提示“新的一盒已补满”，返回首页。仅点击广告或取消观看均不应补盒。 |
+| `services/rewarded-video.js.requestRewardedVideo` | 返回含 `result` Promise 与 `cancel` 的请求；未配置、不可用、忙碌、取消等均非奖励完成；仅关闭回调 `isEnded===true` 形成 `completed`。 |
+| `services/cyber-game-service.js` 的 `PACK_REFILL` 事务 | 核对 `pack:refill` 位置、目标盒实例、空盒和无活跃预留；旧事务不可重复，补盒归档旧盒并建序号 +1 的新盒，不是原地把十槽重置为满。 |
+| 结果页主操作 | `packEmpty` 时文案为“去补一盒”，也导航到同一个选盒补盒页。 |
+
 ## 动画更新与输入时间
 
 | 方法／位置 | 旧包规则 |

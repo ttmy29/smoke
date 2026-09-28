@@ -4,11 +4,12 @@ import { alignWidget, createNode, DESIGN_HEIGHT, DESIGN_WIDTH } from '../common/
 import { SessionModel, SessionSnapshot } from '../domain/SessionModel';
 import { ExtractionSource, HomeController } from '../home/HomeController';
 import { createBrowserProgressStore, ProgressStore } from '../persistence/ProgressStore';
-import { createBrowserPackStore, PackStore } from '../persistence/PackStore';
+import { countAvailableSlots, createBrowserPackStore, PackStore } from '../persistence/PackStore';
 import { ResultController } from '../result/ResultController';
 import { paintCommunityBackground, SessionController } from '../session/SessionController';
 import { CanvasTexture } from '../session/effects/CanvasTexture';
 import { CigaretteView } from '../session/view/CigaretteView';
+import { SupplyController } from '../supply/SupplyController';
 import { sharedEntryMotion } from './EntryMotion';
 
 const { ccclass } = _decorator;
@@ -18,9 +19,11 @@ export class DemoFlow extends Component {
   private homePanel!: Node;
   private sessionPanel!: Node;
   private resultPanel!: Node;
+  private supplyPanel!: Node;
   private transitionLayer!: Node;
   private sessionController!: SessionController;
   private resultController!: ResultController;
+  private supplyController!: SupplyController;
   private homeController!: HomeController;
   private progressStore!: ProgressStore;
   private packStore!: PackStore;
@@ -93,22 +96,27 @@ export class DemoFlow extends Component {
     this.homePanel = createNode('HomePanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.sessionPanel = createNode('SessionPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.resultPanel = createNode('ResultPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.supplyPanel = createNode('SupplyPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.transitionLayer = createNode('TransitionLayer', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
-    for (const panel of [this.homePanel, this.sessionPanel, this.resultPanel, this.transitionLayer]) {
+    for (const panel of [this.homePanel, this.sessionPanel, this.resultPanel, this.supplyPanel, this.transitionLayer]) {
       alignWidget(panel, { left: 0, right: 0, top: 0, bottom: 0 });
     }
 
     this.homeController = this.homePanel.addComponent(HomeController);
-    this.homeController.initialize((slotIndex) => this.startExtraction(slotIndex));
+    this.homeController.initialize((slotIndex) => this.startExtraction(slotIndex), () => this.showSupply());
     this.sessionController = this.sessionPanel.addComponent(SessionController);
     this.sessionController.initialize(audio, (snapshot) => this.showResult(snapshot));
     this.resultController = this.resultPanel.addComponent(ResultController);
-    this.resultController.initialize(() => this.startExtraction(this.homeController.defaultSlot()), () => this.showHome());
+    this.resultController.initialize(() => this.startExtraction(this.homeController.defaultSlot()),
+      () => this.showHome(), () => this.showSupply());
+    this.supplyController = this.supplyPanel.addComponent(SupplyController);
+    this.supplyController.initialize(() => this.showHome(), (instanceId) => this.completeRefill(instanceId));
 
     this.showHome();
   }
 
   private showHome(): void {
+    this.supplyController?.dismiss();
     this.extracting = false;
     this.entrySource = null;
     this.clearTransition();
@@ -121,7 +129,25 @@ export class DemoFlow extends Component {
     this.homeController.refreshLayout();
     this.sessionPanel.active = false;
     this.resultPanel.active = false;
+    this.supplyPanel.active = false;
     this.transitionLayer.active = false;
+  }
+
+  private showSupply(): void {
+    const pack = this.packStore.readPack();
+    if (!pack || countAvailableSlots(pack) !== 0) return;
+    this.supplyController.present(pack);
+    this.homePanel.active = false;
+    this.sessionPanel.active = false;
+    this.resultPanel.active = false;
+    this.transitionLayer.active = false;
+    this.supplyPanel.active = true;
+  }
+
+  private completeRefill(instanceId: string): boolean {
+    if (!this.packStore.refillAfterReward(instanceId)) return false;
+    this.showHome();
+    return true;
   }
 
   private startExtraction(slotIndex: number): void {
@@ -153,6 +179,7 @@ export class DemoFlow extends Component {
     this.sessionController.beginEntryPreview();
     this.sessionPanel.active = true;
     this.resultPanel.active = false;
+    this.supplyPanel.active = false;
     this.transitionLayer.active = true;
     this.sessionPanel.setSiblingIndex(this.node.children.length - 1);
     this.entrySource = source;
@@ -233,6 +260,7 @@ export class DemoFlow extends Component {
     this.sessionPanel.active = false;
     this.resultController.present(snapshot, smokedCount, this.packStore.readPack());
     this.resultPanel.active = true;
+    this.supplyPanel.active = false;
   }
 
   private clearTransition(): void {

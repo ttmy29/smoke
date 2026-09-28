@@ -3,27 +3,52 @@ import type { KeyValueStorage } from './ProgressStore';
 export type PackSlotState = 'available' | 'empty';
 
 export interface PackSnapshot {
+  version: 2;
+  packId: 'wang-xi';
+  /** A refill creates a new box; the previous box never becomes full again. */
+  sequence: number;
+  instanceId: string;
+  slots: PackSlotState[];
+}
+
+interface LegacyPackSnapshot {
   version: 1;
   packId: 'wang-xi';
   slots: PackSlotState[];
 }
 
-const STORAGE_KEY = 'smoke.pack.wang-xi.v1';
+const STORAGE_KEY = 'smoke.pack.wang-xi.v2';
+const LEGACY_STORAGE_KEY = 'smoke.pack.wang-xi.v1';
 const SLOT_COUNT = 10;
 
-function freshPack(): PackSnapshot {
-  return { version: 1, packId: 'wang-xi', slots: Array(SLOT_COUNT).fill('available') };
+function freshPack(sequence = 1): PackSnapshot {
+  return {
+    version: 2, packId: 'wang-xi', sequence,
+    instanceId: `wang-xi:${sequence}`,
+    slots: Array(SLOT_COUNT).fill('available'),
+  };
+}
+
+function validSlots(slots: unknown): slots is PackSlotState[] {
+  return Array.isArray(slots) && slots.length === SLOT_COUNT
+    && slots.every((slot) => slot === 'available' || slot === 'empty');
 }
 
 function isPackSnapshot(value: unknown): value is PackSnapshot {
   if (!value || typeof value !== 'object') return false;
   const pack = value as Partial<PackSnapshot>;
-  return pack.version === 1 && pack.packId === 'wang-xi'
-    && Array.isArray(pack.slots) && pack.slots.length === SLOT_COUNT
-    && pack.slots.every((slot) => slot === 'available' || slot === 'empty');
+  return pack.version === 2 && pack.packId === 'wang-xi'
+    && Number.isSafeInteger(pack.sequence) && (pack.sequence ?? 0) >= 1
+    && pack.instanceId === `wang-xi:${pack.sequence}` && validSlots(pack.slots);
 }
 
-/** Separate from lifetime statistics: arbitrary holes cannot be recovered from a count. */
+function isLegacyPackSnapshot(value: unknown): value is LegacyPackSnapshot {
+  if (!value || typeof value !== 'object') return false;
+  const pack = value as Partial<LegacyPackSnapshot>;
+  return pack.version === 1 && pack.packId === 'wang-xi' && validSlots(pack.slots);
+}
+
+/** Local box inventory. An old V1 box is read without erasing its ten chosen holes. */
 export class PackStore {
   constructor(private readonly storage: KeyValueStorage | null) {}
 
@@ -32,9 +57,15 @@ export class PackStore {
     try {
       if (!this.storage) return null;
       const raw = this.storage.getItem(STORAGE_KEY);
-      if (raw === null) return freshPack();
-      const parsed: unknown = JSON.parse(raw);
-      return isPackSnapshot(parsed) ? parsed : null;
+      if (raw !== null) {
+        const parsed: unknown = JSON.parse(raw);
+        return isPackSnapshot(parsed) ? parsed : null;
+      }
+      const legacyRaw = this.storage.getItem(LEGACY_STORAGE_KEY);
+      if (legacyRaw === null) return freshPack();
+      const legacy: unknown = JSON.parse(legacyRaw);
+      return isLegacyPackSnapshot(legacy)
+        ? { ...freshPack(), slots: [...legacy.slots] } : null;
     } catch {
       return null;
     }
@@ -43,12 +74,23 @@ export class PackStore {
   /** Direct selection confirms one available slot before the extraction animation. */
   public consumeSlot(index: number): PackSnapshot | null {
     if (!Number.isInteger(index) || index < 0 || index >= SLOT_COUNT) return null;
+    const pack = this.readPack();
+    if (!pack || pack.slots[index] !== 'available') return null;
+    const slots = [...pack.slots];
+    slots[index] = 'empty';
+    return this.writePack({ ...pack, slots });
+  }
+
+  /** Must only be called after the rewarded-ad adapter reports completed. */
+  public refillAfterReward(expectedInstanceId: string): PackSnapshot | null {
+    const pack = this.readPack();
+    if (!pack || pack.instanceId !== expectedInstanceId || countAvailableSlots(pack) !== 0
+      || pack.sequence >= Number.MAX_SAFE_INTEGER) return null;
+    return this.writePack(freshPack(pack.sequence + 1));
+  }
+
+  private writePack(next: PackSnapshot): PackSnapshot | null {
     try {
-      const pack = this.readPack();
-      if (!pack || pack.slots[index] !== 'available') return null;
-      const slots = [...pack.slots];
-      slots[index] = 'empty';
-      const next: PackSnapshot = { version: 1, packId: 'wang-xi', slots };
       const encoded = JSON.stringify(next);
       this.storage!.setItem(STORAGE_KEY, encoded);
       return this.storage!.getItem(STORAGE_KEY) === encoded ? next : null;

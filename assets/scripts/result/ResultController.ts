@@ -16,9 +16,10 @@ export class ResultController extends Component {
   private againButton!: Button;
   private againLabel!: Label;
   private contentRoot!: Node;
+  private hasAvailableSlot = false;
 
-  public initialize(onAgain: () => void, onHome: () => void): void {
-    this.build(onAgain, onHome);
+  public initialize(onAgain: () => void, onHome: () => void, onSupply: () => void): void {
+    this.build(onAgain, onHome, onSupply);
   }
 
   public present(snapshot: Readonly<SessionSnapshot>, smokedCount: number | null,
@@ -33,8 +34,9 @@ export class ResultController extends Component {
     this.slotsLabel.string = pack ? pack.slots.map((slot) => slot === 'available' ? '●' : '○').join('  ')
       : '烟盒存档不可用';
     this.inventoryNote.string = pack ? `本盒剩余 ${remaining}/10 支` : '烟盒存档不可用';
-    this.againButton.interactable = !!pack && remaining > 0;
-    this.againLabel.string = pack === null ? '烟盒不可用' : remaining > 0 ? '再 来 一 根' : '本 盒 已 空';
+    this.hasAvailableSlot = remaining > 0;
+    this.againButton.interactable = !!pack;
+    this.againLabel.string = pack === null ? '烟盒不可用' : remaining > 0 ? '再 来 一 根' : '去 补 一 盒';
   }
 
   protected update(): void {
@@ -43,7 +45,7 @@ export class ResultController extends Component {
     this.contentRoot.setScale(scale, scale, 1);
   }
 
-  private build(onAgain: () => void, onHome: () => void): void {
+  private build(onAgain: () => void, onHome: () => void, onSupply: () => void): void {
     createRect('ResultBackground', this.node, DESIGN_WIDTH, 2400, '#111210');
     this.contentRoot = createNode('ResultContent', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     createLabel('PageTitle', this.contentRoot, '本 次 记 录', 26, Palette.goldMuted, 500, 50, 0, 680);
@@ -63,7 +65,8 @@ export class ResultController extends Component {
     createLabel('TimelineText', this.contentRoot, '现在                         完成', 17, Palette.muted, 560, 35, 0, -148);
 
     this.againButton = createButton('Again', this.contentRoot, '再 来 一 根', 430, 86,
-      Palette.orange, Palette.background, 0, -350, onAgain);
+      Palette.orange, Palette.background, 0, -350,
+      () => { if (this.hasAvailableSlot) onAgain(); else onSupply(); });
     this.againLabel = this.againButton.node.getChildByName('Label')!.getComponent(Label)!;
     createButton('Home', this.contentRoot, '回 首 页', 430, 76, Palette.surface, Palette.gold, 0, -450, onHome, Palette.goldMuted);
     createLabel('Disabled', this.contentRoot, '换一盒、分享这根：演示版暂未开放', 17, Palette.muted, 560, 35, 0, -530);

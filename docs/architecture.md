@@ -2,7 +2,7 @@
 
 ## 场景
 
-第一版沿用 `assets/scenes/game.scene`，在一个场景中切换 `HomePanel`、`SessionPanel`、`ResultPanel` 三组节点。共享 Canvas、音频控制和一次会话数据；以后页面增加再拆场景。
+第一版沿用 `assets/scenes/game.scene`，在一个场景中切换 `HomePanel`、`SessionPanel`、`ResultPanel`、`SupplyPanel` 四组节点。共享 Canvas、音频控制和一次会话数据；以后页面增加再拆场景。
 
 ## 当前模块
 
@@ -10,21 +10,23 @@
 
 | 模块 | 当前目录 | 职责 |
 | --- | --- | --- |
-| `DemoFlow` | `scripts/app/` | 切换三个面板，传递会话快照。 |
+| `DemoFlow` | `scripts/app/` | 切换四个面板，传递会话快照；仅奖励结果为完成时调用补盒写入。 |
 | `SessionModel` | `scripts/domain/` | 与引擎无关的状态机、剩余量、灰/烟圈次数、吸入时长和交互准入。 |
-| `HomeController` | `scripts/home/` | 烟盒展示、开盒、选烟和启动会话。 |
+| `HomeController` | `scripts/home/` | 烟盒展示、开盒、选烟和启动会话；0/10 时将主按钮切换成补盒入口，双层文字/Canvas 纹理绘制 2.8 秒扫光。 |
 | `SessionController` | `scripts/session/` | 将长按与按钮输入转为模型事件，调度画面、音效及可见提示。 |
 | `CigaretteView` | `scripts/session/view/` | 香烟、滤嘴、燃烧端、烟头烟、灰帽和弹灰粒子；后续可拆独立 AshEffect。 |
 | `BreathEffects` | `scripts/session/effects/` | 中央呼吸圈、人物吐气烟及基础圆形吐烟圈。 |
 | `CanvasTexture` | `scripts/session/effects/` | 浏览器 Canvas 2D 到 Cocos Sprite 的运行时纹理桥接，供渐变/柔边效果使用。 |
 | `SessionInput`（后续） | `scripts/session/input/` | 目前输入仍在 `SessionController`；将来可拆长按、松开与晃动弹灰手势。 |
 | `DemoAudio` | `scripts/audio/` | 可停止的吸气/吐气主音轨、独立弹灰叠加音轨、静音与临时素材加载；状态结束时由 `SessionController` 停止主音轨。 |
-| `ResultController` | `scripts/result/` | 显示本次结果并返回首页。 |
+| `ResultController` | `scripts/result/` | 显示本次结果并返回首页；当前盒空时转补盒页。 |
+| `SupplyController` | `scripts/supply/` | 空盒补盒页、烟票与换盒占位入口、广告预览弹层。 |
+| `RewardedVideoGateway` | `scripts/services/` | 奖励广告接口，当前 `PreviewRewardedVideoGateway` 返回占位弹层的显式模拟完成/取消结果；真实平台适配器后续替换。 |
 | `AssetCatalog` | `scripts/assets/` | 集中引用临时图片和音频，标注旧包来源。 |
 | `ProgressStore` | `scripts/persistence/` | 通过可替换的键值存储接口读写带版本号的累计抽烟根数；按本根会话 ID 防止结束回调重复计数。未来钱包、任务使用各自的存储对象和接口，不提前并入本次计数。 |
-| `PackStore` | `scripts/persistence/` | 独立保存当前王溪盒 10 个可用/空位槽；选中有效槽后在取烟动画前确认扣除。库存数由槽位计算，不从累计根数倒推；未来补盒须显式增加新盒实例流程。 |
+| `PackStore` | `scripts/persistence/` | 独立保存当前王溪盒 10 个可用/空位槽及盒序号；选中有效槽后在取烟动画前确认扣除，奖励完成且旧盒空时创建下一盒。兼容读取 V1 十槽状态并在写入时迁移。库存数由槽位计算，不从累计根数倒推。 |
 
-数据流：`SessionController → SessionModel → CigaretteView / BreathEffects`；`DemoFlow` 在有效取烟前由 `PackStore` 扣当前盒槽位，会话结束快照再交给 `ProgressStore` 结算累计根数，两个结果供 `HomeController / ResultController` 展示。`CanvasTexture` 只负责显示，不修改业务状态。第一版只做单盒十槽基础库存，不做烟票、补盒、整盒结算。浏览器存储只保障同一站点/浏览器当前设备的数据；不做完整会话历史、进行中恢复、云同步或跨数据事务。
+数据流：`SessionController → SessionModel → CigaretteView / BreathEffects`；`DemoFlow` 在有效取烟前由 `PackStore` 扣当前盒槽位，会话结束快照再交给 `ProgressStore` 结算累计根数，两个结果供 `HomeController / ResultController` 展示。空盒时 `SupplyController → RewardedVideoGateway → DemoFlow → PackStore.refillAfterReward`，只有 `completed` 且旧盒实例 ID 仍匹配才新建满盒；占位广告的“模拟完成”不是实际广告奖励。`CanvasTexture` 只负责显示，不修改业务状态。烟票、真实广告、真实换盒和完整整盒结算仍未实现。浏览器存储只保障同一站点/浏览器当前设备的数据；不做完整会话历史、进行中恢复、云同步或跨数据事务。
 
 取烟入场：`HomeController` 绘制两排共 10 个可见烟槽，并把选中烟、内衬轨及前排烟的世界包围盒转换到过渡层坐标。点击后首页非烟盒内容在 180 ms 内渐隐并隐藏，烟盒保持完整不透明；`DemoFlow` 创建未点燃的 `CigaretteView` 入场实例，`EntryMotion.sharedEntryMotion` 移植旧包曲线（Cocos 向上 Y 轴），`Mask` 模板处理前 28% 遮挡。与会话背景共用 `paintCommunityBackground` 的单张覆盖纹理置于整个 `HomePanel` 上方、抽出的烟下方，清遮挡后用 480 ms 从透明渐至不透明。视觉上剩余的旧首页与烟盒作为整体退去，盒内各层不会互相透出；完全覆盖且运动终点到达后才关闭首页。当前仍是双烟实例交接，不是旧包单 Canvas。临时 Canvas 纹理在交接时显式释放。
 
@@ -32,7 +34,7 @@
 
 `SessionModel` 位于 `assets/scripts/domain/SessionModel.ts`。当前首版状态为 `UNLIT → LIGHTING → IDLE ⇄ INHALING → EXHALING`，并分别以 `FINISHED`、`EXTINGUISHED` 结束。弹灰只在已点燃的待机/吸/吐阶段且有灰或已有弹灰记录时成功；基础烟圈只在吐气阶段成功，每根默认 3 次。所有燃烧和交互数值集中在 `SessionTuning`，视图只读取不可变快照。
 
-当前场景保持 `Canvas + Camera` 的轻量结构，在 Canvas 上挂载 `GameBootstrap`。启动后由 `DemoFlow` 创建 `HomePanel`、`SessionPanel`、`ResultPanel`、`TransitionLayer` 与 `AudioRoot`。后续视觉稳定后可将面板固化为 `assets/prefabs/panels/` 下的预制体，不改变控制器职责。
+当前场景保持 `Canvas + Camera` 的轻量结构，在 Canvas 上挂载 `GameBootstrap`。启动后由 `DemoFlow` 创建 `HomePanel`、`SessionPanel`、`ResultPanel`、`SupplyPanel`、`TransitionLayer` 与 `AudioRoot`。后续视觉稳定后可将面板固化为 `assets/prefabs/panels/` 下的预制体，不改变控制器职责。
 
 布局基准为用户确认的 750×1600、固定宽度适配。`GameBootstrap` 设置设计分辨率；`DemoFlow` 用 Widget 使运行时面板填满 Canvas。`HomeController` 的内容组在短屏整体缩放；烟盒在内容组内再以 X/Y 不同倍率接近旧包左侧主视觉比例，盒身上沿与内衬接合，右侧五项信息为静态展示（未开放项无点击事件）。`SessionController` 将边缘按钮及顶部/右侧工具放入 `SafeArea` HUD，再逐个添加 Widget 约束；短屏隐藏两个暂缓工具。互动背景使用 `CanvasTexture` 按可见高度生成旧包默认场景的渐变、暖光和底部暗化，不再使用固定纯色地板。烟身、灰屑和呼吸特效读取 `view.getVisibleSize().height` 调整纵向几何与动态纹理尺寸，不给粒子逐个添加 Widget。首页/结果页内容在短屏整体缩放。浏览器安全区是否有效仍需用户在目标手机查看；本轮只有静态验证。
 
