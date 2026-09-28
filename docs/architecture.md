@@ -24,7 +24,7 @@
 | `RewardedVideoGateway` | `scripts/services/` | 奖励广告接口，当前 `PreviewRewardedVideoGateway` 返回占位弹层的显式模拟完成/取消结果；真实平台适配器后续替换。 |
 | `AssetCatalog` | `scripts/assets/` | 集中引用临时图片和音频，标注旧包来源。 |
 | `ProgressStore` | `scripts/persistence/` | 通过可替换的键值存储接口读写带版本号的累计抽烟根数；按本根会话 ID 防止结束回调重复计数。未来钱包、任务使用各自的存储对象和接口，不提前并入本次计数。 |
-| `PackStore` | `scripts/persistence/` | 独立保存当前王溪盒 10 个可用/空位槽及盒序号；选中有效槽后在取烟动画前确认扣除，奖励完成且旧盒空时创建下一盒。兼容读取 V1 十槽状态并在写入时迁移。库存数由槽位计算，不从累计根数倒推。 |
+| `PackStore` | `scripts/persistence/` | 独立保存当前王溪盒 10 个可用/空位槽、盒序号及盒盖开合状态；选中有效槽后在取烟动画前确认扣除，奖励完成且旧盒空时创建下一盒。兼容读取 V1 十槽及早期无盒盖字段的 V2 状态。库存数由槽位计算，不从累计根数倒推。 |
 
 数据流：`SessionController → SessionModel → CigaretteView / BreathEffects`；`DemoFlow` 在有效取烟前由 `PackStore` 扣当前盒槽位，会话结束快照再交给 `ProgressStore` 结算累计根数，两个结果供 `HomeController / ResultController` 展示。空盒时 `SupplyController → RewardedVideoGateway → DemoFlow → PackStore.refillAfterReward`，只有 `completed` 且旧盒实例 ID 仍匹配才新建满盒；占位广告的“模拟完成”不是实际广告奖励。`CanvasTexture` 只负责显示，不修改业务状态。烟票、真实广告、真实换盒和完整整盒结算仍未实现。浏览器存储只保障同一站点/浏览器当前设备的数据；不做完整会话历史、进行中恢复、云同步或跨数据事务。
 

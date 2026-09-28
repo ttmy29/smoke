@@ -103,7 +103,8 @@ export class DemoFlow extends Component {
     }
 
     this.homeController = this.homePanel.addComponent(HomeController);
-    this.homeController.initialize((slotIndex) => this.startExtraction(slotIndex), () => this.showSupply());
+    this.homeController.initialize((slotIndex) => this.startExtraction(slotIndex),
+      () => this.showSupply(), (instanceId) => this.packStore.openLid(instanceId));
     this.sessionController = this.sessionPanel.addComponent(SessionController);
     this.sessionController.initialize(audio, (snapshot) => this.showResult(snapshot));
     this.resultController = this.resultPanel.addComponent(ResultController);
