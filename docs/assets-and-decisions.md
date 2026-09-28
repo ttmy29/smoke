@@ -8,7 +8,7 @@
 
 若方便，请提供一段从“长按点火”到“吸一口、吐烟、弹灰”的短录屏，或至少三张：**点燃后、正在吐烟、弹灰瞬间**。当前四图没有展示火焰、燃烧端发光、烟雾形态和灰屑运动；这些只能先做近似，标 `VISUAL_APPROX`。
 
-## 旧包现有素材（可暂用，尚未导入新工程）
+## 旧包现有素材
 
 - 烟盒皮肤：`pack-skins/assets/*.jpg`、`assets/packs/life/skin.jpg`。
 - 音效：`audio/ignition/*.mp3`、`audio/actions/inhale.mp3`、`audio/actions/exhale-*.mp3`、`audio/actions/ash-tap.mp3`。
@@ -16,6 +16,16 @@
 - 香烟本体、灰层和烟雾主要是程序绘制，尚未确认有整根香烟图片。
 
 使用旧素材时，在资源引用处标 `LEGACY_ASSET` 与 `TODO_REPLACE`；不把旧资源目录整包复制进 `assets`。
+
+### 已导入的首版临时资源（2026-09-24）
+
+- `assets/resources/textures/packs/wang-xi.jpg` ← `assets/packs/life/skin.jpg`。
+- `assets/resources/audio/ignition.mp3` ← `audio/ignition/ember-wheel.mp3`。
+- `assets/resources/audio/inhale.mp3` ← `audio/actions/inhale.mp3`。
+- `assets/resources/audio/exhale.mp3` ← `audio/actions/exhale-soft.mp3`。
+- `assets/resources/audio/ash-tap.mp3` ← `audio/actions/ash-tap.mp3`。
+
+资源引用和替换标记集中在 `assets/scripts/assets/AssetCatalog.ts`。其余旧资源没有复制。
 
 ## 已决定／未决定
 
