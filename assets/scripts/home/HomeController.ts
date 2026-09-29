@@ -1,8 +1,10 @@
-import { _decorator, BlockInputEvents, Button, Component, Graphics, HorizontalTextAlignment, Label, Mask, Node, resources, screen, Sprite, SpriteFrame, UITransform, UIOpacity, Vec3, view, Widget } from 'cc';
+import { _decorator, BlockInputEvents, Button, Component, EventTouch, Graphics, HorizontalTextAlignment, Label, Mask, Node, resources, screen, Sprite, SpriteFrame, UITransform, UIOpacity, Vec3, view, Widget } from 'cc';
 import { AssetCatalog } from '../assets/AssetCatalog';
 import { alignWidget, color, createButton, createLabel, createNode, createRect, DESIGN_HEIGHT, DESIGN_WIDTH, Palette } from '../common/UiFactory';
 import { CanvasTexture } from '../session/effects/CanvasTexture';
 import { countAvailableSlots, PackSnapshot } from '../persistence/PackStore';
+import type { HomeSmokingStatus } from '../persistence/ProgressStore';
+import type { CheckInSnapshot } from '../persistence/CheckInStore';
 
 const { ccclass } = _decorator;
 
@@ -26,6 +28,7 @@ interface SideCardLayout {
   title: Label;
   subtitle: Label | null;
   rows: Node[];
+  lock: Node | null;
 }
 
 @ccclass('HomeController')
@@ -35,6 +38,10 @@ export class HomeController extends Component {
   private onStart: ((slotIndex: number) => void) | null = null;
   private onSupply: (() => void) | null = null;
   private onOpenLid: ((instanceId: string) => PackSnapshot | null) | null = null;
+  private onReadHomeSmokingStatus: (() => HomeSmokingStatus | null) | null = null;
+  private onReadCheckInStatus: (() => CheckInSnapshot | null) | null = null;
+  private onCheckIn: (() => void) | null = null;
+  private checkInSnapshot: CheckInSnapshot | null = null;
   private contentRoot!: Node;
   private headerRoot!: Node;
   private settingsRoot!: Node;
@@ -60,6 +67,8 @@ export class HomeController extends Component {
   private actionSubtitles: Label[] = [];
   private statusLabels: Label[] = [];
   private statusValues: Label[] = [];
+  private homeSmokingStatus: HomeSmokingStatus | null = null;
+  private homeStatusMinute = -1;
   private sideCards: SideCardLayout[] = [];
   private packSwitchArrows: Node[] = [];
   private packSwitchCaption!: Label;
@@ -81,7 +90,10 @@ export class HomeController extends Component {
   private inventoryUnitLabel!: Label;
   private announcementTagLabel!: Label;
   private announcementLabel!: Label;
-  private inventorySegments: CanvasTexture[] = [];
+  private encouragementChip!: CanvasTexture;
+  private encouragementLabel!: Label;
+  private encouragementChipWidth = 0;
+  private inventorySegments: Array<{ filled: CanvasTexture; empty: CanvasTexture }> = [];
   private startButton!: Button;
   private startButtonLabel!: Label;
   private startSweep!: CanvasTexture;
@@ -100,15 +112,26 @@ export class HomeController extends Component {
   private displayedPackInstanceId = '';
 
   public initialize(onStart: (slotIndex: number) => void, onSupply: () => void,
-    onOpenLid: (instanceId: string) => PackSnapshot | null): void {
+    onOpenLid: (instanceId: string) => PackSnapshot | null,
+    onReadHomeSmokingStatus: () => HomeSmokingStatus | null,
+    onCheckIn: () => void, onReadCheckInStatus: () => CheckInSnapshot | null): void {
     this.onStart = onStart;
     this.onSupply = onSupply;
     this.onOpenLid = onOpenLid;
+    this.onReadHomeSmokingStatus = onReadHomeSmokingStatus;
+    this.onCheckIn = onCheckIn;
+    this.onReadCheckInStatus = onReadCheckInStatus;
     this.build();
   }
 
   protected update(deltaTime: number): void {
     this.refreshLayout();
+    const minute = Math.floor(Date.now() / 60000);
+    if (this.homeStatusMinute !== minute) {
+      this.homeStatusMinute = minute;
+      this.setHomeSmokingStatus(this.onReadHomeSmokingStatus?.() ?? null);
+      this.setCheckInSnapshot(this.onReadCheckInStatus?.() ?? null);
+    }
     if (this.lidAnimating) this.updateLid(deltaTime);
     if (this.startSweep && !this.entryMode && this.pack) {
       this.sweepElapsed = (this.sweepElapsed + Math.max(0, deltaTime)) % 2.8;
@@ -123,8 +146,12 @@ export class HomeController extends Component {
   protected onDestroy(): void {
     for (const texture of this.filterTextures) texture.dispose();
     this.filterTextures = [];
-    for (const texture of this.inventorySegments) texture.dispose();
+    for (const segment of this.inventorySegments) {
+      segment.filled.dispose();
+      segment.empty.dispose();
+    }
     this.inventorySegments = [];
+    this.encouragementChip?.dispose();
     this.startSweep?.dispose();
     this.backgroundTexture?.dispose();
   }
@@ -215,6 +242,7 @@ export class HomeController extends Component {
       label.node.setScale(1, 1 / noticeScale, 1);
     }
     this.layoutInventoryValue(unitsPerCssPixel);
+    this.layoutEncouragementChip(cssWidth, noticeScale, unitsPerCssPixel);
     this.sloganLabel.fontSize = fontSize(12, 22);
     this.sloganLabel.lineHeight = this.sloganLabel.fontSize * 1.35;
     this.sloganLabel.node.getComponent(UITransform)?.setContentSize(690, 20 * unitsPerCssPixel);
@@ -235,13 +263,22 @@ export class HomeController extends Component {
       label.fontSize = fontSize(12, narrow ? 19 : 22);
       label.lineHeight = label.fontSize * 1.3;
       label.node.setScale(1, 1 / workspaceScale, 1);
-      label.node.setPosition(label.node.position.x, 13 / workspaceScale);
     }
     for (const label of this.statusValues) {
       label.fontSize = fontSize(12, narrow ? 19 : 23);
       label.lineHeight = label.fontSize * 1.2;
       label.node.setScale(1, 1 / workspaceScale, 1);
-      label.node.setPosition(label.node.position.x, -14 / workspaceScale);
+    }
+    for (let index = 0; index < this.statusLabels.length; index += 1) {
+      const label = this.statusLabels[index];
+      const value = this.statusValues[index];
+      const gap = (cssHeight <= 750 ? 2 : 1) * cssWidth / 750 * unitsPerCssPixel;
+      const labelY = (value.lineHeight + gap) / (2 * workspaceScale);
+      const valueY = -(label.lineHeight + gap) / (2 * workspaceScale);
+      label.node.setPosition(label.node.position.x, labelY);
+      value.node.setPosition(value.node.position.x, valueY);
+      label.node.getComponent(UITransform)?.setContentSize(182, label.lineHeight);
+      value.node.getComponent(UITransform)?.setContentSize(182, value.lineHeight);
     }
     this.layoutSideCards(workspaceScale, cssWidth, cssHeight, unitsPerCssPixel);
     this.packSwitchCaption.fontSize = fontSize(11, 20);
@@ -283,8 +320,108 @@ export class HomeController extends Component {
     const unitWidth = Math.max(34, this.inventoryUnitLabel.fontSize * 1.2);
     this.inventoryUnitLabel.node.getComponent(UITransform)?.setContentSize(unitWidth,
       Math.max(34, this.inventoryUnitLabel.lineHeight));
+    const noticeScale = 112 * unitsPerCssPixel / 220;
     this.inventoryUnitLabel.node.setPosition(left + numberWidth + 10 + unitWidth / 2,
-      -70 - (this.packStatusLabel.lineHeight - this.inventoryUnitLabel.lineHeight) / 2);
+      -70 - (this.packStatusLabel.lineHeight - this.inventoryUnitLabel.lineHeight)
+        / (2 * noticeScale));
+  }
+
+  private paintInventorySegment(segment: CanvasTexture, filled: boolean): void {
+    segment.redraw((ctx) => {
+      const width = 44;
+      const height = 18;
+      const radius = 7;
+      ctx.beginPath();
+      ctx.moveTo(-width / 2 + radius, -height / 2);
+      ctx.lineTo(width / 2 - radius, -height / 2);
+      ctx.quadraticCurveTo(width / 2, -height / 2, width / 2, -height / 2 + radius);
+      ctx.lineTo(width / 2, height / 2 - radius);
+      ctx.quadraticCurveTo(width / 2, height / 2, width / 2 - radius, height / 2);
+      ctx.lineTo(-width / 2 + radius, height / 2);
+      ctx.quadraticCurveTo(-width / 2, height / 2, -width / 2, height / 2 - radius);
+      ctx.lineTo(-width / 2, -height / 2 + radius);
+      ctx.quadraticCurveTo(-width / 2, -height / 2, -width / 2 + radius, -height / 2);
+      ctx.closePath();
+      if (filled) {
+        const gradient = ctx.createLinearGradient(-width / 2, 0, width / 2, 0);
+        gradient.addColorStop(0, '#f37c2e');
+        gradient.addColorStop(1, '#efae58');
+        ctx.fillStyle = gradient;
+      } else {
+        ctx.fillStyle = '#292927';
+      }
+      ctx.fill();
+      if (filled) {
+        ctx.fillStyle = 'rgba(255,239,202,0.24)';
+        ctx.fillRect(-width / 2 + radius, height / 2 - 3, width - radius * 2, 2);
+      }
+    });
+  }
+
+  private layoutEncouragementChip(cssWidth: number, noticeScale: number,
+    unitsPerCssPixel: number): void {
+    const width = Math.round(690 * (cssWidth <= 340 ? 0.52 : 0.5));
+    if (width !== this.encouragementChipWidth) {
+      this.encouragementChipWidth = width;
+      this.encouragementChip.resize(width, 52);
+      this.paintEncouragementChip(width);
+    }
+    this.encouragementChip.node.setPosition(345 - 2 - width / 2,
+      6 - 26 / noticeScale);
+    this.encouragementChip.node.setScale(1, 1 / noticeScale, 1);
+    const labelWidth = width - 14 * 2 - 24 - 13;
+    this.encouragementLabel.fontSize = Math.max(12, (cssWidth <= 340 ? 19 : 21)
+      * cssWidth / 750) * unitsPerCssPixel;
+    this.encouragementLabel.lineHeight = this.encouragementLabel.fontSize * 1.2;
+    this.encouragementLabel.node.getComponent(UITransform)?.setContentSize(
+      labelWidth, this.encouragementLabel.lineHeight);
+    this.encouragementLabel.node.setPosition(-width / 2 + 14 + 24 + 13 + labelWidth / 2, 0);
+  }
+
+  private paintEncouragementChip(width: number): void {
+    this.encouragementChip.redraw((ctx) => {
+      const half = width / 2;
+      const cut = width * 0.04;
+      ctx.beginPath();
+      ctx.moveTo(-half + cut, 26);
+      ctx.lineTo(half - cut, 26);
+      ctx.lineTo(half, 13);
+      ctx.lineTo(half, -13);
+      ctx.lineTo(half - cut, -26);
+      ctx.lineTo(-half + cut, -26);
+      ctx.lineTo(-half, -13);
+      ctx.lineTo(-half, 13);
+      ctx.closePath();
+      const fill = ctx.createLinearGradient(0, 26, 0, -26);
+      fill.addColorStop(0, 'rgba(37,29,20,0.88)');
+      fill.addColorStop(1, 'rgba(17,16,14,0.92)');
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(119,82,47,0.62)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.save();
+      ctx.translate(-half + 14 + 12, 0);
+      ctx.rotate(-24 * Math.PI / 180);
+      const leaf = ctx.createLinearGradient(-12, 8, 12, -8);
+      leaf.addColorStop(0, '#8fa12e');
+      leaf.addColorStop(1, '#497219');
+      ctx.fillStyle = leaf;
+      ctx.shadowColor = 'rgba(109,138,35,0.28)';
+      ctx.shadowBlur = 9;
+      ctx.beginPath();
+      ctx.moveTo(-12, -8.5);
+      ctx.bezierCurveTo(-10, 2, -2, 8.5, 12, 8.5);
+      ctx.bezierCurveTo(10, -2, 2, -8.5, -12, -8.5);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(205,190,101,0.52)';
+      ctx.beginPath();
+      ctx.moveTo(-10, -5);
+      ctx.lineTo(10, 4);
+      ctx.stroke();
+      ctx.restore();
+    });
   }
 
   private layoutSideCards(workspaceScale: number,
@@ -292,48 +429,111 @@ export class HomeController extends Component {
     const localPerCssY = unitsPerCssPixel / workspaceScale;
     const railHeight = 850 * 0.954;
     const railCssHeight = railHeight / localPerCssY;
-    const ordinaryTargetCss = 44;
     const gapCss = 4;
-    // Preserve room for the three status rows before allocating the four action cards.
-    const ordinaryCss = Math.min(ordinaryTargetCss,
-      Math.max(38, (railCssHeight - 128 - gapCss * 4) / 4));
-    const ordinaryHeight = ordinaryCss * localPerCssY;
+    // The legacy locked cards prefer 68px, but forcing both minimums on a short
+    // screen pushes the gift card below the workbench. Use a compact locked
+    // layout only when the rail cannot fit all minimum heights.
+    const lockedCount = this.sideCards.filter((card) => card.lock?.active).length;
+    const ordinaryCount = this.sideCards.filter((card) => card.kind !== 'today').length;
+    const preferredMinCss = ordinaryCount * 44 + lockedCount * 24 + 128 + gapCss * 4;
+    const compactLocked = railCssHeight < preferredMinCss;
+    const cardCssHeight = (card: SideCardLayout): number =>
+      card.lock?.active && !compactLocked ? 68 : 44;
     const gap = gapCss * localPerCssY;
-    const todayHeight = Math.max(1, railHeight - ordinaryHeight * 4 - gap * 4);
+    const fixedCssHeight = this.sideCards.reduce((total, card) =>
+      total + (card.kind === 'today' ? 0 : cardCssHeight(card)), 0);
+    const todayHeight = Math.max(1, railCssHeight - fixedCssHeight - gapCss * 4)
+      * localPerCssY;
     let cursor = 850 / 2 - railHeight * 0.0352;
     for (const card of this.sideCards) {
-      const height = card.kind === 'today' ? todayHeight : ordinaryHeight;
+      const height = card.kind === 'today' ? todayHeight : cardCssHeight(card) * localPerCssY;
       card.node.setPosition(221, cursor - height / 2);
       card.node.getComponent(UITransform)?.setContentSize(248, height);
       this.paintInfoCardFrame(card.frame, height, card.kind === 'gift');
       const markScale = card.kind === 'gift' ? 22 * unitsPerCssPixel / 44 : 1;
       card.mark.setScale(markScale, markScale / workspaceScale, 1);
+      if (card.lock) card.mark.active = !card.lock.active;
+      if (card.lock?.active) {
+        card.mark.active = false;
+        const lockScale = 0.8 * unitsPerCssPixel;
+        card.lock.setScale(lockScale, lockScale / workspaceScale, 1);
+        card.lock.setPosition(124 - (10 + 14 * 0.8 / 2) * unitsPerCssPixel,
+          height / 2 - (16 + 21 * 0.8 / 2) * localPerCssY);
+      }
       if (card.kind === 'today') {
-        const headerY = height / 2 - 24 * localPerCssY;
-        card.mark.setPosition(card.mark.position.x, headerY);
-        card.title.node.setPosition(card.title.node.position.x, headerY);
-        const visibleHeightCss = height / localPerCssY;
-        const rowsTop = visibleHeightCss / 2 - 40;
-        const rowsBottom = -visibleHeightCss / 2 + 8;
+        const rpx = (value: number): number => value * cssWidth / 750;
+        const cardPadding = cssWidth <= 340 ? rpx(13) : rpx(18);
+        const headerHeight = rpx(36);
+        const headerY = height / 2 - (rpx(8) + headerHeight / 2) * localPerCssY;
+        card.mark.active = cssWidth > 340;
+        card.mark.setPosition(-124 + cardPadding * unitsPerCssPixel + rpx(49) * unitsPerCssPixel / 2,
+          headerY);
+        const titleLeft = cssWidth <= 340 ? cardPadding : cardPadding + rpx(49 + 14);
+        card.title.node.setPosition(-124 + (titleLeft + rpx(146) / 2) * unitsPerCssPixel,
+          headerY);
+        // The old card uses space-evenly below a 36rpx header. The check-in
+        // action row is 44px high; the other two have a 34px minimum.
+        const compact = cssHeight <= 750;
+        const rowsTop = height / 2 - (rpx(8 + 36) + rpx(compact ? 2 : 4)) * localPerCssY;
+        const rowsBottom = -height / 2 + (rpx(4) + rpx(compact ? 0 : 2)) * localPerCssY;
+        const rowHeights = [34, 34, 44];
+        const freeSpace = Math.max(0, (rowsTop - rowsBottom) / localPerCssY
+          - rowHeights.reduce((sum, rowHeight) => sum + rowHeight, 0));
+        const rowGap = freeSpace / 4;
+        let rowTop = rowsTop / localPerCssY - rowGap;
         card.rows.forEach((row, index) => {
-          row.setPosition(0, (rowsTop - (index + 0.5) * (rowsTop - rowsBottom) / 3) * localPerCssY);
-          row.getChildByName('StatusIcon')?.setScale(1, 1 / workspaceScale, 1);
+          const rowHeight = rowHeights[index];
+          row.setPosition(0, (rowTop - rowHeight / 2) * localPerCssY);
+          rowTop -= rowHeight + rowGap;
+          const checkin = index === 2;
+          const rowPadding = rpx(checkin ? 8 : 6);
+          const iconSize = rpx(cssWidth <= 340 ? 24 : 31);
+          const iconLeft = -124 + (cardPadding + rowPadding) * unitsPerCssPixel;
+          const icon = row.getChildByName('StatusIcon');
+          icon?.setPosition(iconLeft + iconSize * unitsPerCssPixel / 2, rpx(1) * localPerCssY);
+          icon?.setScale(iconSize * unitsPerCssPixel / 31,
+            iconSize * unitsPerCssPixel / (31 * workspaceScale), 1);
+          const textLeft = iconLeft + iconSize * unitsPerCssPixel + rpx(10) * unitsPerCssPixel;
+          const arrowSpace = checkin ? rpx(8 + 13) * unitsPerCssPixel : 0;
+          const textRight = 124 - (cardPadding + rowPadding) * unitsPerCssPixel - arrowSpace;
+          const textWidth = Math.max(1, textRight - textLeft);
+          for (const textNode of [this.statusLabels[index].node, this.statusValues[index].node]) {
+            textNode.setPosition(textLeft + textWidth / 2, textNode.position.y);
+            textNode.getComponent(UITransform)?.setContentSize(textWidth,
+              textNode.getComponent(Label)?.lineHeight ?? 30);
+          }
+          const chevron = row.getChildByName('CheckinChevron');
+          chevron?.setPosition(124 - (cardPadding + rowPadding + rpx(13) / 2) * unitsPerCssPixel,
+            0);
+          chevron?.setScale(rpx(13) * unitsPerCssPixel / 13,
+            rpx(13) * unitsPerCssPixel / (13 * workspaceScale), 1);
         });
       } else if (card.subtitle) {
+        const locked = card.lock?.active ?? false;
+        const hasSubtitle = card.subtitle.node.active;
+        if (locked) {
+          card.subtitle.fontSize = 12 * unitsPerCssPixel;
+          card.subtitle.lineHeight = card.subtitle.fontSize * 1.5;
+          card.subtitle.color = color('#d0b38e');
+        }
         const titleCss = card.title.fontSize / unitsPerCssPixel;
         const subtitleCss = card.subtitle.fontSize / unitsPerCssPixel;
         const titleLineCss = titleCss * (card.kind === 'lab' ? 1.08 : 1.1);
-        const subtitleLineCss = subtitleCss * 1.35;
-        const preferredGapCss = (cssHeight <= 740 ? 4 : 8) * cssWidth / 750;
-        const copyGapCss = Math.max(0, Math.min(preferredGapCss,
-          ordinaryCss - titleLineCss - subtitleLineCss - 2));
+        const subtitleLineCss = hasSubtitle ? subtitleCss * (locked ? 1.5 : 1.35) : 0;
+        const preferredGapCss = (locked ? 4 : cssHeight <= 740 ? 4 : 8) * cssWidth / 750;
+        const copyGapCss = hasSubtitle ? Math.max(0, Math.min(preferredGapCss,
+          cardCssHeight(card) - titleLineCss - subtitleLineCss - 2)) : 0;
         card.title.node.setPosition(card.title.node.position.x,
           (subtitleLineCss + copyGapCss) * localPerCssY / 2);
         card.subtitle.node.setPosition(card.subtitle.node.position.x,
           -(titleLineCss + copyGapCss) * localPerCssY / 2);
-        card.title.node.getComponent(UITransform)?.setContentSize(146,
+        const copyWidth = locked ? Math.max(1, 248 - 20 * unitsPerCssPixel) : 146;
+        const copyX = locked ? -124 + 10 * unitsPerCssPixel + copyWidth / 2 : 33;
+        card.title.node.setPosition(copyX, card.title.node.position.y);
+        card.subtitle.node.setPosition(copyX, card.subtitle.node.position.y);
+        card.title.node.getComponent(UITransform)?.setContentSize(copyWidth,
           titleLineCss * unitsPerCssPixel);
-        card.subtitle.node.getComponent(UITransform)?.setContentSize(146,
+        card.subtitle.node.getComponent(UITransform)?.setContentSize(copyWidth,
           subtitleLineCss * unitsPerCssPixel);
       }
       cursor -= height + gap;
@@ -363,36 +563,8 @@ export class HomeController extends Component {
     this.inventoryUnitLabel.string = pack ? '支' : '';
     for (let index = 0; index < this.inventorySegments.length; index += 1) {
       const segment = this.inventorySegments[index];
-      const filled = index < remaining;
-      segment.redraw((ctx) => {
-        const width = 44;
-        const height = 18;
-        const radius = 7;
-        ctx.beginPath();
-        ctx.moveTo(-width / 2 + radius, -height / 2);
-        ctx.lineTo(width / 2 - radius, -height / 2);
-        ctx.quadraticCurveTo(width / 2, -height / 2, width / 2, -height / 2 + radius);
-        ctx.lineTo(width / 2, height / 2 - radius);
-        ctx.quadraticCurveTo(width / 2, height / 2, width / 2 - radius, height / 2);
-        ctx.lineTo(-width / 2 + radius, height / 2);
-        ctx.quadraticCurveTo(-width / 2, height / 2, -width / 2, height / 2 - radius);
-        ctx.lineTo(-width / 2, -height / 2 + radius);
-        ctx.quadraticCurveTo(-width / 2, -height / 2, -width / 2 + radius, -height / 2);
-        ctx.closePath();
-        if (filled) {
-          const gradient = ctx.createLinearGradient(-width / 2, 0, width / 2, 0);
-          gradient.addColorStop(0, '#f37c2e');
-          gradient.addColorStop(1, '#efae58');
-          ctx.fillStyle = gradient;
-        } else {
-          ctx.fillStyle = '#292927';
-        }
-        ctx.fill();
-        if (filled) {
-          ctx.fillStyle = 'rgba(255,239,202,0.24)';
-          ctx.fillRect(-width / 2 + radius, height / 2 - 3, width - radius * 2, 2);
-        }
-      });
+      segment.filled.node.active = index < remaining;
+      segment.empty.node.active = index >= remaining;
     }
     this.startButton.interactable = !!pack && !this.lidAnimating;
     this.startButtonLabel.string = pack === null ? '烟盒不可用' : remaining > 0 ? '来一根' : '补一盒';
@@ -404,8 +576,70 @@ export class HomeController extends Component {
     this.refreshSlotVisibility();
   }
 
-  public setSmokedCount(count: number | null): void {
-    this.smokedCountLabel.string = count === null ? '本机存档不可用' : `累计已抽 ${count} 根`;
+  public setSmokedCount(_count: number | null): void {
+    this.smokedCountLabel.string = this.checkInSnapshot?.cumulativeDays >= 3
+      ? '查看全部' : '打卡3天解锁';
+  }
+
+  public setCheckInSnapshot(snapshot: CheckInSnapshot | null): void {
+    this.checkInSnapshot = snapshot;
+    if (this.smokedCountLabel) {
+      this.smokedCountLabel.string = snapshot?.cumulativeDays >= 3
+        ? '查看全部' : '打卡3天解锁';
+    }
+    if (this.statusValues.length >= 3) {
+      this.statusValues[2].string = snapshot === null ? '暂时不可用'
+        : `${snapshot.streak} 天 · ${snapshot.checkedToday ? '已打卡' : '未打卡'}`;
+      this.statusValues[2].color = color(snapshot?.checkedToday ? '#e0c69d' : '#efc38c');
+      const chevron = this.sideCards.find((card) => card.kind === 'today')?.rows[2]
+        ?.getChildByName('CheckinChevron');
+      if (chevron) chevron.active = snapshot !== null && !snapshot.checkedToday;
+    }
+    for (const card of this.sideCards) {
+      if (card.kind === 'records' && card.lock) {
+        card.lock.active = !(snapshot && snapshot.cumulativeDays >= 3);
+        card.subtitle!.string = card.lock.active ? '打卡3天解锁' : '查看全部';
+        card.subtitle!.color = color(card.lock.active ? '#d0b38e' : '#a58f74');
+      } else if (card.kind === 'lab' && card.lock) {
+        card.lock.active = !(snapshot && snapshot.cumulativeDays >= 2);
+        card.subtitle!.string = card.lock.active ? '打卡2天解锁' : '';
+        card.subtitle!.node.active = card.lock.active;
+        card.subtitle!.color = color(card.lock.active ? '#d0b38e' : '#a58f74');
+      }
+    }
+    this.typographyLayoutKey = '';
+  }
+
+  public setHomeSmokingStatus(status: HomeSmokingStatus | null): void {
+    this.homeSmokingStatus = status;
+    if (this.statusValues.length < 3) return;
+    const now = Date.now();
+    this.statusValues[0].string = status === null ? '暂时不可用'
+      : status.lastCompletedAt === null
+        ? status.historyUnknown ? '历史时间不可用' : '暂无记录'
+        : this.formatLastSmokeTime(status.lastCompletedAt, now);
+    this.statusValues[1].string = status?.todaySmoked === null || !status
+      ? '--' : `${status.todaySmoked} 支`;
+    this.setCheckInSnapshot(this.checkInSnapshot);
+  }
+
+  private formatLastSmokeTime(timestamp: number, now: number): string {
+    const elapsed = Math.max(0, now - timestamp);
+    if (elapsed < 60000) return '刚刚';
+    if (elapsed < 3600000) return `${Math.floor(elapsed / 60000)} 分钟前`;
+    if (elapsed < 86400000) return `${Math.floor(elapsed / 3600000)} 小时前`;
+    const date = new Date(timestamp);
+    const today = new Date(now);
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    const pad = (value: number): string => value < 10 ? `0${value}` : String(value);
+    if (date.getFullYear() === yesterday.getFullYear()
+      && date.getMonth() === yesterday.getMonth() && date.getDate() === yesterday.getDate()) {
+      return `昨天 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+    if (date.getFullYear() === today.getFullYear()) {
+      return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
+    }
+    return `${date.getFullYear()} 年 ${date.getMonth() + 1} 月 ${date.getDate()} 日`;
   }
 
   private beginOpenLid(extractAfterOpen: boolean): void {
@@ -552,10 +786,20 @@ export class HomeController extends Component {
     this.inventoryUnitLabel = createLabel('InventoryUnit', this.noticeRoot, '支',
       24, '#d1b38b', 34, 34, -210, -73);
     for (let index = 0; index < 10; index += 1) {
-      const segment = new CanvasTexture(`InventorySegment${index}`, this.noticeRoot, 44, 18);
-      segment.node.setPosition(-142 + index * 50, -70);
-      this.inventorySegments.push(segment);
+      const filled = new CanvasTexture(`InventoryFilled${index}`, this.noticeRoot, 44, 18);
+      const empty = new CanvasTexture(`InventoryEmpty${index}`, this.noticeRoot, 44, 18);
+      filled.node.setPosition(-142 + index * 50, -70);
+      empty.node.setPosition(-142 + index * 50, -70);
+      this.paintInventorySegment(filled, true);
+      this.paintInventorySegment(empty, false);
+      this.inventorySegments.push({ filled, empty });
     }
+    this.encouragementChip = new CanvasTexture('EncouragementChip', this.noticeRoot, 345, 52);
+    this.encouragementLabel = createLabel('EncouragementText', this.encouragementChip.node,
+      '你正在减少伤害，继续保持', 21, '#c7ad89', 280, 30,
+      15, 0, HorizontalTextAlignment.LEFT);
+    this.encouragementLabel.enableWrapText = false;
+    this.encouragementLabel.overflow = Label.Overflow.NONE;
 
     this.workspaceRoot = createNode('HomeWorkbench', this.contentRoot, 690, 850);
     this.buildPack();
@@ -568,7 +812,7 @@ export class HomeController extends Component {
     // Four 44 px action cards keep 4 px gaps; Today's status fills the remainder.
     const sideRailTop = 850 / 2 - 850 * 0.954 * 0.0352;
     const sideRailOffset = sideRailTop - 376;
-    this.smokedCountLabel = this.buildInfoCard('记录', '累计已抽 0 根', sideRailX, 332 + sideRailOffset, 'records', 88);
+    this.smokedCountLabel = this.buildInfoCard('记录', '打卡3天解锁', sideRailX, 332 + sideRailOffset, 'records', 88);
     this.buildInfoCard('烟雾实验室', '打卡2天解锁', sideRailX, 236 + sideRailOffset, 'lab', 88);
     this.buildInfoCard('换一盒', '选择烟盒', sideRailX, 140 + sideRailOffset, 'switch', 88);
     this.buildInfoCard('今日状态', '', sideRailX, -126 + sideRailOffset, 'today', 428);
@@ -878,7 +1122,9 @@ export class HomeController extends Component {
   private buildPack(): void {
     const boxWidth = 330;
     const boxHeight = 600;
-    const packRoot = createNode('PackRoot', this.workspaceRoot, boxWidth, boxHeight, -133, 0);
+    // Keep the hit box on the visible 0.06–0.96 pack range; the 600-unit
+    // construction box otherwise overlaps the 44px switch-pack control below.
+    const packRoot = createNode('PackRoot', this.workspaceRoot, boxWidth, boxHeight * 0.92, -133, 0);
     this.packRoot = packRoot;
     packRoot.on(Node.EventType.TOUCH_END, () => this.beginOpenLid(false));
     // Legacy pack-box is 86% of the 61.5% left column, then the active pack is
@@ -995,7 +1241,14 @@ export class HomeController extends Component {
       this.filterTextures.push(material);
       this.slots[index] = stick;
       if (!rear) this.frontSlots.push(stick);
-      stick.on(Node.EventType.TOUCH_END, () => {
+      // The full stick continues behind PackFront (z-index 5 in V1.0.8).
+      // Only its exposed part above the front-face top may select a slot.
+      const slotTop = deck.position.y + y + deckHeight / 2;
+      const exposedHeight = Math.min(deckHeight, Math.max(0, slotTop - bodyTop - 2));
+      const hitRegion = createNode(`VisibleSlotHit${index}`, stick, 45, exposedHeight,
+        0, deckHeight / 2 - exposedHeight / 2);
+      hitRegion.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+        event.propagationStopped = true;
         if (this.entryMode || this.lidAnimating || !this.pack?.lidOpen
           || this.pack.slots[index] !== 'available') return;
         this.selectedSlot = index;
@@ -1294,7 +1547,19 @@ export class HomeController extends Component {
     const width = 690 / 4;
     const x = -690 / 2 + width * (index + 0.5);
     const action = createNode(`Quick${title}`, this.quickRoot, width, 112, x, 0);
-    action.addComponent(Button).transition = Button.Transition.NONE;
+    const button = action.addComponent(Button);
+    button.transition = index === 0 ? Button.Transition.SCALE : Button.Transition.NONE;
+    let pressFill: Node | null = null;
+    if (index === 0) {
+      button.zoomScale = 1;
+      pressFill = createNode('PressedFill', action, width, 112);
+      const pressed = pressFill.addComponent(Graphics);
+      pressed.fillColor = color('#be7434', 31);
+      pressed.rect(-width / 2, -56, width, 112);
+      pressed.fill();
+      pressFill.active = false;
+      action.on(Button.EventType.CLICK, () => this.onCheckIn?.());
+    }
     if (index > 0) createRect('Divider', action, 1, 80, '#514839', -width / 2, 0);
     const iconNode = createNode('Icon', action, 50, 50, 0, 18);
     this.quickIcons.push(iconNode);
@@ -1347,6 +1612,18 @@ export class HomeController extends Component {
     label.lineHeight = 27;
     label.isBold = true;
     this.quickLabels.push(label);
+    if (pressFill) {
+      action.on(Node.EventType.TOUCH_START, () => {
+        pressFill!.active = true;
+        label.color = color('#f3dbc0');
+      });
+      const clearPress = (): void => {
+        pressFill!.active = false;
+        label.color = color('#d3bea0');
+      };
+      action.on(Node.EventType.TOUCH_END, clearPress);
+      action.on(Node.EventType.TOUCH_CANCEL, clearPress);
+    }
   }
 
   private buildPackNavigation(): void {
@@ -1408,7 +1685,7 @@ export class HomeController extends Component {
       giftTitle.isBold = true;
       this.actionTitles.push({ label: giftTitle, rpx: 28, minimumPx: 14, copyOffsetY: 0 });
       this.sideCards.push({ node: card, frame, mark: mark.node, kind: iconKind,
-        title: giftTitle, subtitle: null, rows: [] });
+        title: giftTitle, subtitle: null, rows: [], lock: null });
       return giftTitle;
     }
     const titleSize = iconKind === 'lab' ? 26 : 30;
@@ -1425,15 +1702,32 @@ export class HomeController extends Component {
         this.buildTodayStatusRow(card, 'CheckinStreak', '连续打卡', -136),
       ];
       this.sideCards.push({ node: card, frame, mark: mark.node, kind: iconKind,
-        title: titleLabel, subtitle: null, rows });
+        title: titleLabel, subtitle: null, rows, lock: null });
       return titleLabel;
     }
     const subtitle = createLabel('Value', card, value, 24, '#a58f74',
       146, 34, 33, -20, HorizontalTextAlignment.LEFT);
     this.actionSubtitles.push(subtitle);
+    const lock = iconKind === 'records' || iconKind === 'lab'
+      ? this.buildAccessLock(card) : null;
     this.sideCards.push({ node: card, frame, mark: mark.node, kind: iconKind,
-      title: titleLabel, subtitle, rows: [] });
+      title: titleLabel, subtitle, rows: [], lock });
     return subtitle;
+  }
+
+  private buildAccessLock(parent: Node): Node {
+    const node = createNode('AccessLock', parent, 14, 21);
+    const graphic = node.addComponent(Graphics);
+    graphic.strokeColor = color('#c4a071');
+    graphic.lineWidth = 1.5;
+    graphic.moveTo(-3.5, 1);
+    graphic.lineTo(-3.5, 5);
+    graphic.bezierCurveTo(-3.5, 10, 3.5, 10, 3.5, 5);
+    graphic.lineTo(3.5, 1);
+    graphic.stroke();
+    graphic.roundRect(-7, -10, 14, 12, 3);
+    graphic.stroke();
+    return node;
   }
 
   private paintSwitchArrows(mark: Graphics): void {
@@ -1542,23 +1836,47 @@ export class HomeController extends Component {
 
   private buildTodayStatusRow(parent: Node, name: string, caption: string, y: number): Node {
     const row = createNode(name, parent, 220, 72, 0, y);
+    if (name === 'CheckinStreak') {
+      const opacity = row.addComponent(UIOpacity);
+      row.on(Node.EventType.TOUCH_START, () => {
+        if (this.checkInSnapshot && !this.checkInSnapshot.checkedToday) opacity.opacity = 173;
+      });
+      row.on(Node.EventType.TOUCH_END, () => {
+        opacity.opacity = 255;
+        if (this.checkInSnapshot && !this.checkInSnapshot.checkedToday) this.onCheckIn?.();
+      });
+      row.on(Node.EventType.TOUCH_CANCEL, () => { opacity.opacity = 255; });
+    }
     const mark = createNode('StatusIcon', row, 31, 31, -90, 0).addComponent(Graphics);
-    mark.strokeColor = color('#d8a85f');
-    mark.lineWidth = 2;
+    mark.strokeColor = color('#f0c58b');
+    mark.fillColor = color('#f0c58b');
+    mark.lineWidth = 3;
     if (name === 'LastSmoke') {
-      mark.circle(0, 0, 13);
+      mark.circle(0, 0, 14);
       mark.moveTo(0, 8); mark.lineTo(0, 0); mark.lineTo(6, -4);
     } else if (name === 'TodaySmoked') {
-      mark.circle(0, 0, 13); mark.circle(0, 0, 6); mark.circle(0, 0, 2);
+      mark.circle(0, 0, 14); mark.circle(0, 0, 7);
     } else {
-      mark.roundRect(-11, -10, 22, 21, 2);
-      mark.moveTo(-7, 1); mark.lineTo(-1, -5); mark.lineTo(8, 6);
+      mark.roundRect(-14, -14, 28, 28, 5);
+      mark.moveTo(-7, 16); mark.lineTo(-7, 21);
+      mark.moveTo(8, 16); mark.lineTo(8, 21);
+      mark.moveTo(-7, -1); mark.lineTo(-1, -7); mark.lineTo(9, 5);
     }
     mark.stroke();
     const label = createLabel('StatusLabel', row, caption, 24, '#c6af90',
-      164, 30, 18, 13, HorizontalTextAlignment.LEFT);
-    const value = createLabel('StatusValue', row, '—', 24, '#c9b89f',
-      164, 30, 18, -14, HorizontalTextAlignment.LEFT);
+      182, 30, 18, 13, HorizontalTextAlignment.LEFT);
+    const value = createLabel('StatusValue', row, '—', 24,
+      name === 'CheckinStreak' ? '#efc38c' : '#c9b89f',
+      182, 30, 18, -14, HorizontalTextAlignment.LEFT);
+    if (name === 'CheckinStreak') {
+      const chevron = createNode('CheckinChevron', row, 13, 13).addComponent(Graphics);
+      chevron.strokeColor = color('#b99269');
+      chevron.lineWidth = 3;
+      chevron.moveTo(-4, 6);
+      chevron.lineTo(3, 0);
+      chevron.lineTo(-4, -6);
+      chevron.stroke();
+    }
     this.statusLabels.push(label);
     this.statusValues.push(value);
     return row;

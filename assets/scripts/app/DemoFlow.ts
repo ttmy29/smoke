@@ -10,9 +10,22 @@ import { paintCommunityBackground, SessionController } from '../session/SessionC
 import { CanvasTexture } from '../session/effects/CanvasTexture';
 import { CigaretteView } from '../session/view/CigaretteView';
 import { SupplyController } from '../supply/SupplyController';
+import { CheckInController } from '../checkin/CheckInController';
+import { CHECK_IN_STORAGE_KEY, CheckInStore, createBrowserCheckInStore } from '../persistence/CheckInStore';
 import { sharedEntryMotion } from './EntryMotion';
 
 const { ccclass } = _decorator;
+
+// 开发测试开关：true = 每次进入游戏都初始化本项目存档；false = 保留存档。
+// 验证完初始状态后改回 false，否则每次刷新都会重新开始。
+const RESET_LOCAL_SAVE_ON_START = true;
+const LOCAL_SAVE_KEYS = [
+  'smoke.pack.wang-xi.v1',
+  'smoke.pack.wang-xi.v2',
+  'smoke.progress.v1',
+  'smoke.progress.v2',
+  CHECK_IN_STORAGE_KEY,
+];
 
 @ccclass('DemoFlow')
 export class DemoFlow extends Component {
@@ -20,13 +33,16 @@ export class DemoFlow extends Component {
   private sessionPanel!: Node;
   private resultPanel!: Node;
   private supplyPanel!: Node;
+  private checkInPanel!: Node;
   private transitionLayer!: Node;
   private sessionController!: SessionController;
   private resultController!: ResultController;
   private supplyController!: SupplyController;
+  private checkInController!: CheckInController;
   private homeController!: HomeController;
   private progressStore!: ProgressStore;
   private packStore!: PackStore;
+  private checkInStore!: CheckInStore;
   private activeSessionId: string | null = null;
   private extracting = false;
   private entryElapsed = 0;
@@ -87,8 +103,16 @@ export class DemoFlow extends Component {
   }
 
   protected onLoad(): void {
+    if (RESET_LOCAL_SAVE_ON_START) {
+      try {
+        for (const key of LOCAL_SAVE_KEYS) window.localStorage.removeItem(key);
+      } catch (error) {
+        console.warn('Failed to initialize local smoke save', error);
+      }
+    }
     this.progressStore = createBrowserProgressStore();
     this.packStore = createBrowserPackStore();
+    this.checkInStore = createBrowserCheckInStore();
     const audioNode = new Node('AudioRoot');
     this.node.addChild(audioNode);
     const audio = audioNode.addComponent(DemoAudio);
@@ -97,14 +121,18 @@ export class DemoFlow extends Component {
     this.sessionPanel = createNode('SessionPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.resultPanel = createNode('ResultPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.supplyPanel = createNode('SupplyPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.checkInPanel = createNode('CheckInPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.transitionLayer = createNode('TransitionLayer', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
-    for (const panel of [this.homePanel, this.sessionPanel, this.resultPanel, this.supplyPanel, this.transitionLayer]) {
+    for (const panel of [this.homePanel, this.sessionPanel, this.resultPanel,
+      this.supplyPanel, this.checkInPanel, this.transitionLayer]) {
       alignWidget(panel, { left: 0, right: 0, top: 0, bottom: 0 });
     }
 
     this.homeController = this.homePanel.addComponent(HomeController);
     this.homeController.initialize((slotIndex) => this.startExtraction(slotIndex),
-      () => this.showSupply(), (instanceId) => this.packStore.openLid(instanceId));
+      () => this.showSupply(), (instanceId) => this.packStore.openLid(instanceId),
+      () => this.progressStore.readHomeSmokingStatus(), () => this.showCheckIn(),
+      () => this.checkInStore.readSnapshot());
     this.sessionController = this.sessionPanel.addComponent(SessionController);
     this.sessionController.initialize(audio, (snapshot) => this.showResult(snapshot));
     this.resultController = this.resultPanel.addComponent(ResultController);
@@ -112,12 +140,17 @@ export class DemoFlow extends Component {
       () => this.showHome(), () => this.showSupply());
     this.supplyController = this.supplyPanel.addComponent(SupplyController);
     this.supplyController.initialize(() => this.showHome(), (instanceId) => this.completeRefill(instanceId));
+    this.checkInController = this.checkInPanel.addComponent(CheckInController);
+    this.checkInController.initialize(this.checkInStore, () => this.showHome(), () => {
+      this.homeController.setCheckInSnapshot(this.checkInStore.readSnapshot());
+    });
 
     this.showHome();
   }
 
   private showHome(): void {
     this.supplyController?.dismiss();
+    this.checkInController?.dismiss();
     this.extracting = false;
     this.entrySource = null;
     this.clearTransition();
@@ -125,13 +158,29 @@ export class DemoFlow extends Component {
     this.homeController?.setEntryMode(false);
     this.homeController?.setPack(this.packStore.readPack());
     this.homeController?.setSmokedCount(this.progressStore.readSmokedCount());
+    this.homeController?.setHomeSmokingStatus(this.progressStore.readHomeSmokingStatus());
+    this.homeController?.setCheckInSnapshot(this.checkInStore.readSnapshot());
     this.sessionController?.cancelEntryPreview();
     this.homePanel.active = true;
     this.homeController.refreshLayout();
     this.sessionPanel.active = false;
     this.resultPanel.active = false;
     this.supplyPanel.active = false;
+    this.checkInPanel.active = false;
     this.transitionLayer.active = false;
+  }
+
+  private showCheckIn(): void {
+    if (this.extracting) return;
+    if (this.checkInPanel.active) return;
+    this.checkInController.present();
+    // Keep the home page visible beneath the native-style right-to-left push.
+    this.homePanel.active = true;
+    this.sessionPanel.active = false;
+    this.resultPanel.active = false;
+    this.supplyPanel.active = false;
+    this.transitionLayer.active = false;
+    this.checkInPanel.active = true;
   }
 
   private showSupply(): void {
@@ -258,6 +307,7 @@ export class DemoFlow extends Component {
     const smokedCount = this.activeSessionId
       ? this.progressStore.recordCompletedCigarette(this.activeSessionId) : null;
     this.homeController.setSmokedCount(smokedCount);
+    this.homeController.setHomeSmokingStatus(this.progressStore.readHomeSmokingStatus());
     this.sessionPanel.active = false;
     this.resultController.present(snapshot, smokedCount, this.packStore.readPack());
     this.resultPanel.active = true;
