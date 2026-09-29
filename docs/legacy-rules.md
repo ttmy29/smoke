@@ -40,9 +40,12 @@ V1.0.7 历史证据文件 SHA-256：`appservice.app.js = 57B60D1D95D5B5F4F608A33
 | `flickCyberAshV3` | `READY/INHALE/EXHALE` 可弹；调用物理层保留残灰，并按 ID/次数派生稳定随机值。不是“达到阈值才允许”。 |
 | `recordSmokeRingV3` | 普通手势仅 `EXHALE`；编队型在 `READY/INHALE/EXHALE`；计数 +1。次数限制由组件层实施。 |
 | `extinguishCyberSessionV3` | `IGNITION/READY/INHALE/EXHALE` 可熄灭，写 `endedAt` 和 `extinguished`。取烟未确认时不可调用。 |
+
 | `isCyberSessionV3Ended` | 只识别 `FINISHED/EXTINGUISHED`。 |
 | `smokingAshStateV3` | 提取灰长、掉灰量、阈值和弹灰次数。 |
 | `isStoredCyberSessionV3` | 校验 schema、各 ID、槽位、状态、千分点、灰/烟圈计数、puff 列表、累计消耗守恒及结果/结束时间一致性；用于读盘时拒绝坏记录。 |
+
+V1.0.8 `components/session-experience/session-experience.js` 的 `stopSession` 在调用上述领域方法后立即进入 `completeAndRoute`：停止音频和逐帧绘制，经记录提交后打开结果页。`drawCigarette` 的燃烧层判断本身未按 `EXTINGUISHED` 关闭，但正常结束路径取消了画面帧，因此不能把它解读为旧包要求显示一帧或一段“熄灭后仍燃烧的烟”。正常路径也没有固定等待或专门的熄灭过渡动画；提交/跳页失败另走错误与重试流程。
 
 ### `domain/smoking-physics.js`
 

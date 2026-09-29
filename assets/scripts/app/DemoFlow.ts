@@ -18,7 +18,7 @@ const { ccclass } = _decorator;
 
 // 开发测试开关：true = 每次进入游戏都初始化本项目存档；false = 保留存档。
 // 验证完初始状态后改回 false，否则每次刷新都会重新开始。
-const RESET_LOCAL_SAVE_ON_START = true;
+const RESET_LOCAL_SAVE_ON_START = false;
 const LOCAL_SAVE_KEYS = [
   'smoke.pack.wang-xi.v1',
   'smoke.pack.wang-xi.v2',
