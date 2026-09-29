@@ -36,7 +36,7 @@
 
 当前场景保持 `Canvas + Camera` 的轻量结构，在 Canvas 上挂载 `GameBootstrap`。启动后由 `DemoFlow` 创建 `HomePanel`、`SessionPanel`、`ResultPanel`、`SupplyPanel`、`TransitionLayer` 与 `AudioRoot`。后续视觉稳定后可将面板固化为 `assets/prefabs/panels/` 下的预制体，不改变控制器职责。
 
-布局基准为用户确认的 750×1600、固定宽度适配。`GameBootstrap` 设置设计分辨率；`DemoFlow` 用 Widget 使运行时面板填满 Canvas。`HomeController` 的内容组在短屏整体缩放；烟盒在内容组内再以 X/Y 不同倍率接近旧包左侧主视觉比例，盒身上沿与内衬接合，右侧五项信息为静态展示（未开放项无点击事件）。`SessionController` 将边缘按钮及顶部/右侧工具放入 `SafeArea` HUD，再逐个添加 Widget 约束；短屏隐藏两个暂缓工具。互动背景使用 `CanvasTexture` 按可见高度生成旧包默认场景的渐变、暖光和底部暗化，不再使用固定纯色地板。烟身、灰屑和呼吸特效读取 `view.getVisibleSize().height` 调整纵向几何与动态纹理尺寸，不给粒子逐个添加 Widget。首页/结果页内容在短屏整体缩放。浏览器安全区是否有效仍需用户在目标手机查看；本轮只有静态验证。
+布局基准为用户确认的 750×1600、固定宽度适配。`GameBootstrap` 设置设计分辨率；`DemoFlow` 用 Widget 使运行时面板填满 Canvas。`HomeController` 的底部“来一根／全服”导航用 Widget 固定贴底，并把旧包固定 CSS px 尺寸按实时视口宽度换算到设计坐标；普通首页内容只使用导航上方的剩余高度，短屏整体缩放并允许中部工作区继续纵向压缩。烟盒在内容组内再以 X/Y 不同倍率接近旧包左侧主视觉比例，盒身上沿与内衬接合，右侧五项信息为静态展示（未开放项无点击事件）。`SessionController` 将边缘按钮及顶部/右侧工具放入 `SafeArea` HUD，再逐个添加 Widget 约束；短屏隐藏两个暂缓工具。互动背景使用 `CanvasTexture` 按可见高度生成旧包默认场景的渐变、暖光和底部暗化，不再使用固定纯色地板。烟身、灰屑和呼吸特效读取 `view.getVisibleSize().height` 调整纵向几何与动态纹理尺寸，不给粒子逐个添加 Widget。首页/结果页内容在短屏整体缩放。底部导航当前只预留标准 57 CSS px，非零手机安全区仍需目标设备验收；本轮只有静态验证。
 
 ## 渲染与注释约定
 

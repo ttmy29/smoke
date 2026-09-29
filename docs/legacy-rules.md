@@ -1,8 +1,10 @@
 # 旧包规则审计：业务、时间与绘制
 
-审计日期：2026-09-24。源为只读编译包 `E:\json\smoke_wxd0b7dafebccb8110_unpacked`，不是原始 TypeScript。本文记录**从编译代码可直接证实**的规则；[122 个模块与可静态识别方法索引](legacy-module-index.md)覆盖全包入口，本文详细展开与三页演示及抽烟画面有关的函数。压缩包中的匿名回调、运行时函数和平台实际行为无法仅凭静态代码做到“所有方法语义 100% 证明”。下文路径均为旧包 `currentFile` 路径。
+原审计日期：2026-09-24；V1.0.8 基准补充日期：2026-09-29。本文主体最初来自只读 V1.0.7 编译包 `E:\json\smoke_wxd0b7dafebccb8110_unpacked`，不是原始 TypeScript。现已确认当前视觉与交互验收基准为 `E:\json\wxd0b7dafebccb8110_unpacked` 中的 **V1.0.8**：优先读取 `app-config-1.json`、同名 `*-1` 文件及新增的 `chunk_10`～`chunk_13`、`world-tools/`、`custom-tab-bar/`。本文既有的 122 模块统计和哈希属于 V1.0.7 历史审计，不代表 V1.0.8 全包已重新索引；若两版冲突，以 V1.0.8 为准。
 
-证据文件 SHA-256：`appservice.app.js = 57B60D1D95D5B5F4F608A33B473D6E8BF0F9A02E37C93D4C1E5CD4CEF644B38B`；`chunk_3.appservice.js = B75FED94A94A265CBC249CE1A4C6077FEE9E57F84D3DE11A8AD7F6237305567E`；`chunk_4.appservice.js = 257E6FA606AFB97BF8269E8964E201DBC6C42DE176DE98C0A49E7AACDA675D72`。旧包另有 `app-service.js` 聚合副本；索引以 `appservice.app.js + chunk_0…9.appservice.js` 去重。
+本文记录**从编译代码可直接证实**的规则；[模块与可静态识别方法索引](legacy-module-index.md)当前仅覆盖 V1.0.7 历史入口，本文详细展开与三页演示及抽烟画面有关的函数。压缩包中的匿名回调、运行时函数和平台实际行为无法仅凭静态代码做到“所有方法语义 100% 证明”。下文路径均为旧包 `currentFile` 路径。
+
+V1.0.7 历史证据文件 SHA-256：`appservice.app.js = 57B60D1D95D5B5F4F608A33B473D6E8BF0F9A02E37C93D4C1E5CD4CEF644B38B`；`chunk_3.appservice.js = B75FED94A94A265CBC249CE1A4C6077FEE9E57F84D3DE11A8AD7F6237305567E`；`chunk_4.appservice.js = 257E6FA606AFB97BF8269E8964E201DBC6C42DE176DE98C0A49E7AACDA675D72`。旧包另有 `app-service.js` 聚合副本；旧索引以 `appservice.app.js + chunk_0…9.appservice.js` 去重。不得用这些哈希证明 V1.0.8 对应文件内容相同。
 
 ## 旧包分辨率与画布像素
 

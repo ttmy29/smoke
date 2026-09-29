@@ -1,6 +1,6 @@
-import { _decorator, Button, Component, Graphics, Label, Mask, Node, resources, Sprite, SpriteFrame, UITransform, UIOpacity, Vec3, view } from 'cc';
+import { _decorator, BlockInputEvents, Button, Component, Graphics, HorizontalTextAlignment, Label, Mask, Node, resources, screen, Sprite, SpriteFrame, UITransform, UIOpacity, Vec3, view, Widget } from 'cc';
 import { AssetCatalog } from '../assets/AssetCatalog';
-import { color, createButton, createLabel, createNode, createRect, DESIGN_HEIGHT, DESIGN_WIDTH, Palette } from '../common/UiFactory';
+import { alignWidget, color, createButton, createLabel, createNode, createRect, DESIGN_HEIGHT, DESIGN_WIDTH, Palette } from '../common/UiFactory';
 import { CanvasTexture } from '../session/effects/CanvasTexture';
 import { countAvailableSlots, PackSnapshot } from '../persistence/PackStore';
 
@@ -16,6 +16,18 @@ export interface ExtractionSource {
   liftRatio: number;
 }
 
+type SideCardKind = 'records' | 'lab' | 'switch' | 'today' | 'gift';
+
+interface SideCardLayout {
+  node: Node;
+  frame: Graphics;
+  mark: Node;
+  kind: SideCardKind;
+  title: Label;
+  subtitle: Label | null;
+  rows: Node[];
+}
+
 @ccclass('HomeController')
 export class HomeController extends Component {
   public static readonly PACK_FILTER_HEIGHT = 600 * 0.52;
@@ -25,10 +37,33 @@ export class HomeController extends Component {
   private onOpenLid: ((instanceId: string) => PackSnapshot | null) | null = null;
   private contentRoot!: Node;
   private headerRoot!: Node;
+  private settingsRoot!: Node;
   private quickRoot!: Node;
   private noticeRoot!: Node;
   private workspaceRoot!: Node;
+  private packNavigation!: Node;
   private footerRoot!: Node;
+  private sloganLabel!: Label;
+  private startRoot!: Node;
+  private bottomTabRoot!: Node;
+  private bottomTabGraphics!: Graphics;
+  private homeTabRoot!: Node;
+  private worldTabRoot!: Node;
+  private homeTabIcon!: Node;
+  private worldTabIcon!: Node;
+  private homeTabLabel!: Label;
+  private worldTabLabel!: Label;
+  private bottomTabUnit = 0;
+  private quickLabels: Label[] = [];
+  private quickIcons: Node[] = [];
+  private actionTitles: Array<{ label: Label; rpx: number; minimumPx: number; copyOffsetY: number | null }> = [];
+  private actionSubtitles: Label[] = [];
+  private statusLabels: Label[] = [];
+  private statusValues: Label[] = [];
+  private sideCards: SideCardLayout[] = [];
+  private packSwitchArrows: Node[] = [];
+  private packSwitchCaption!: Label;
+  private typographyLayoutKey = '';
   private packRoot!: Node;
   private slots: Node[] = [];
   private frontSlots: Node[] = [];
@@ -44,6 +79,8 @@ export class HomeController extends Component {
   private packStatusLabel!: Label;
   private inventoryCaptionLabel!: Label;
   private inventoryUnitLabel!: Label;
+  private announcementTagLabel!: Label;
+  private announcementLabel!: Label;
   private inventorySegments: CanvasTexture[] = [];
   private startButton!: Button;
   private startButtonLabel!: Label;
@@ -96,21 +133,211 @@ export class HomeController extends Component {
     if (!this.contentRoot) return;
     const visibleHeight = view.getVisibleSize().height;
     this.refreshBackground(visibleHeight);
-    const scale = Math.min(1, visibleHeight / 1280);
-    const layoutHeight = visibleHeight / scale;
-    this.contentRoot.getComponent(UITransform)?.setContentSize(DESIGN_WIDTH, layoutHeight);
-    this.contentRoot.setScale(scale, scale, 1);
-    const top = layoutHeight / 2;
-    this.headerRoot.setPosition(0, top - 62);
-    this.quickRoot.setPosition(0, top - 180);
-    this.noticeRoot.setPosition(0, top - 354);
-    this.footerRoot.setPosition(0, -top + 150);
-    const workspaceTop = top - 464;
-    const workspaceBottom = -top + 286;
-    this.workspaceRoot.setPosition(0, (workspaceTop + workspaceBottom) / 2);
-    const workspaceScale = Math.max(0.78, Math.min(1, (workspaceTop - workspaceBottom) / 850));
-    // Legacy responsive rules change workbench height without shrinking its 100% width.
+    const unit = this.cssPixelScale();
+    const tabHeight = 57 * unit;
+    this.refreshBottomTabLayout(unit);
+    const availableHeight = Math.max(1, visibleHeight - tabHeight);
+    this.contentRoot.getComponent(UITransform)?.setContentSize(DESIGN_WIDTH, availableHeight);
+    this.contentRoot.setScale(1, 1, 1);
+    this.contentRoot.setPosition(0, tabHeight / 2);
+    // The V1.0.8 home is a vertical flex stack: only the workbench takes the
+    // remaining height. Navigation is a separate row after it, not a child.
+    const headerHeight = 44 * unit;
+    const quickHeight = 56 * unit;
+    const noticeHeight = 112 * unit; // 44 px announcement + 8 px gap + 60 px inventory
+    const navHeight = 44 * unit;
+    const footerHeight = 80 * unit; // 20 px quote + 4 px gap + 56 px button
+    const reservedHeight = (44 + 8 + 56 + 8 + 112 + 4 + 44 + 80 + 12) * unit;
+    const workbenchHeight = Math.max(1, availableHeight - reservedHeight);
+    let cursor = availableHeight / 2;
+    this.headerRoot.setPosition(0, cursor - headerHeight / 2);
+    const settingsScale = headerHeight / 88;
+    this.settingsRoot.setScale(settingsScale, settingsScale, 1);
+    this.settingsRoot.setPosition(345 - headerHeight / 2, 0);
+    cursor -= headerHeight + 8 * unit;
+    this.quickRoot.setPosition(0, cursor - quickHeight / 2);
+    const quickScale = quickHeight / 112;
+    this.quickRoot.setScale(1, quickScale, 1);
+    cursor -= quickHeight + 8 * unit;
+    this.noticeRoot.setPosition(0, cursor - noticeHeight / 2);
+    const noticeScale = noticeHeight / 220;
+    this.noticeRoot.setScale(1, noticeScale, 1);
+    cursor -= noticeHeight + 4 * unit;
+    this.workspaceRoot.setPosition(0, cursor - workbenchHeight / 2);
+    const workspaceScale = workbenchHeight / 850;
     this.workspaceRoot.setScale(1, workspaceScale, 1);
+    cursor -= workbenchHeight;
+    this.packNavigation.setPosition(-133, cursor - navHeight / 2);
+    this.packNavigation.getComponent(UITransform)?.setContentSize(424, navHeight);
+    cursor -= navHeight;
+    this.footerRoot.setPosition(0, cursor - footerHeight / 2);
+    this.sloganLabel.node.setPosition(0, 30 * unit);
+    this.startRoot.setPosition(0, -12 * unit);
+    const startScale = 56 * unit / 112;
+    this.startRoot.setScale(1, startScale, 1);
+    for (const ornament of this.startRoot.children) {
+      if (ornament.name.startsWith('Arrow') || ornament.name.startsWith('Bolt')) {
+        ornament.setScale(1, 1 / startScale, 1);
+      }
+      if (ornament.name.startsWith('BoltTop')) {
+        ornament.setPosition(ornament.position.x, 56 - 22.5 / startScale);
+      } else if (ornament.name.startsWith('BoltBottom')) {
+        ornament.setPosition(ornament.position.x, -56 + 24.5 / startScale);
+      }
+    }
+    this.refreshTypography(workspaceScale, noticeScale, quickScale, startScale);
+  }
+
+  private refreshTypography(workspaceScale: number, noticeScale: number,
+    quickScale: number, startScale: number): void {
+    const cssWidth = screen.windowSize.width / (screen.devicePixelRatio || 1);
+    const cssHeight = screen.windowSize.height / (screen.devicePixelRatio || 1);
+    const key = `${cssWidth}:${cssHeight}:${workspaceScale}:${noticeScale}:${quickScale}:${startScale}`;
+    if (this.typographyLayoutKey === key) return;
+    this.typographyLayoutKey = key;
+    const unitsPerCssPixel = this.cssPixelScale();
+    const fontSize = (minimumPx: number, rpx: number): number =>
+      Math.max(minimumPx, rpx * cssWidth / 750) * unitsPerCssPixel;
+    const narrow = cssWidth <= 340;
+    for (const label of this.quickLabels) {
+      label.fontSize = fontSize(12, narrow ? 25 : 27);
+      label.lineHeight = label.fontSize;
+      label.node.setScale(1, 1 / quickScale, 1);
+    }
+    for (const icon of this.quickIcons) icon.setScale(1, 1 / quickScale, 1);
+    for (const [label, minimumPx, rpx] of [
+      [this.announcementTagLabel, 13, 26], [this.announcementLabel, 13, 26],
+      [this.inventoryCaptionLabel, 12, 25], [this.packStatusLabel, 0, 54],
+      [this.inventoryUnitLabel, 12, 24],
+    ] as Array<[Label, number, number]>) {
+      label.fontSize = fontSize(minimumPx, rpx);
+      label.lineHeight = label.fontSize * (label === this.packStatusLabel ? 0.9 : 1.2);
+      label.node.setScale(1, 1 / noticeScale, 1);
+    }
+    this.layoutInventoryValue(unitsPerCssPixel);
+    this.sloganLabel.fontSize = fontSize(12, 22);
+    this.sloganLabel.lineHeight = this.sloganLabel.fontSize * 1.35;
+    this.sloganLabel.node.getComponent(UITransform)?.setContentSize(690, 20 * unitsPerCssPixel);
+    for (const { label, rpx, minimumPx, copyOffsetY } of this.actionTitles) {
+      label.fontSize = fontSize(narrow && rpx === 30 ? 12 : minimumPx,
+        narrow && rpx === 30 ? 26 : rpx);
+      label.lineHeight = label.fontSize * (rpx === 26 ? 1.08 : 1.1);
+      label.node.setScale(1, 1 / workspaceScale, 1);
+      if (copyOffsetY !== null) label.node.setPosition(label.node.position.x, copyOffsetY / workspaceScale);
+    }
+    for (const label of this.actionSubtitles) {
+      label.fontSize = fontSize(12, narrow ? 19 : 20);
+      label.lineHeight = label.fontSize * 1.35;
+      label.node.setScale(1, 1 / workspaceScale, 1);
+      label.node.setPosition(label.node.position.x, -20 / workspaceScale);
+    }
+    for (const label of this.statusLabels) {
+      label.fontSize = fontSize(12, narrow ? 19 : 22);
+      label.lineHeight = label.fontSize * 1.3;
+      label.node.setScale(1, 1 / workspaceScale, 1);
+      label.node.setPosition(label.node.position.x, 13 / workspaceScale);
+    }
+    for (const label of this.statusValues) {
+      label.fontSize = fontSize(12, narrow ? 19 : 23);
+      label.lineHeight = label.fontSize * 1.2;
+      label.node.setScale(1, 1 / workspaceScale, 1);
+      label.node.setPosition(label.node.position.x, -14 / workspaceScale);
+    }
+    this.layoutSideCards(workspaceScale, cssWidth, cssHeight, unitsPerCssPixel);
+    this.packSwitchCaption.fontSize = fontSize(11, 20);
+    this.packSwitchCaption.lineHeight = this.packSwitchCaption.fontSize * 1.5;
+    this.packSwitchCaption.node.setScale(1, 1, 1);
+    const arrowSize = 44 * unitsPerCssPixel;
+    const arrowX = 424 / 2 - arrowSize / 2;
+    this.packSwitchArrows.forEach((arrow, index) => {
+      arrow.getComponent(UITransform)?.setContentSize(arrowSize, arrowSize);
+      arrow.setPosition(index === 0 ? -arrowX : arrowX, 0);
+      arrow.setScale(1, 1, 1);
+    });
+    this.packSwitchCaption.node.getComponent(UITransform)?.setContentSize(
+      Math.max(1, 424 - 2 * arrowSize), 15 * unitsPerCssPixel);
+    this.startButtonLabel.fontSize = fontSize(0, this.pack === null ? 46 : 62);
+    this.startButtonLabel.lineHeight = this.startButtonLabel.fontSize * 1.05;
+    this.startSweep.node.setScale(1, 1 / startScale, 1);
+    this.paintStartSweep();
+  }
+
+  private layoutInventoryValue(unitsPerCssPixel: number): void {
+    // CSS uses an unconstrained flex row. Measuring the actual number prevents
+    // Label.Overflow.SHRINK from reducing 1/10 or 10/10 inside a 116-unit box.
+    const number = this.packStatusLabel.string;
+    const ctx = this.startSweep.context;
+    ctx.save();
+    ctx.font = `560 ${this.packStatusLabel.fontSize}px "Arial Narrow", Arial, sans-serif`;
+    const numberWidth = Math.ceil(ctx.measureText(number).width
+      + Math.max(0, number.length - 1) * this.packStatusLabel.spacingX + 4 * unitsPerCssPixel);
+    ctx.restore();
+    const left = -345 + 8;
+    this.packStatusLabel.overflow = Label.Overflow.CLAMP;
+    this.packStatusLabel.enableWrapText = false;
+    this.packStatusLabel.horizontalAlign = HorizontalTextAlignment.LEFT;
+    this.packStatusLabel.node.getComponent(UITransform)?.setContentSize(numberWidth,
+      Math.max(58, this.packStatusLabel.lineHeight));
+    this.packStatusLabel.node.setPosition(left + numberWidth / 2, -70);
+    this.inventoryUnitLabel.horizontalAlign = HorizontalTextAlignment.LEFT;
+    const unitWidth = Math.max(34, this.inventoryUnitLabel.fontSize * 1.2);
+    this.inventoryUnitLabel.node.getComponent(UITransform)?.setContentSize(unitWidth,
+      Math.max(34, this.inventoryUnitLabel.lineHeight));
+    this.inventoryUnitLabel.node.setPosition(left + numberWidth + 10 + unitWidth / 2,
+      -70 - (this.packStatusLabel.lineHeight - this.inventoryUnitLabel.lineHeight) / 2);
+  }
+
+  private layoutSideCards(workspaceScale: number,
+    cssWidth: number, cssHeight: number, unitsPerCssPixel: number): void {
+    const localPerCssY = unitsPerCssPixel / workspaceScale;
+    const railHeight = 850 * 0.954;
+    const railCssHeight = railHeight / localPerCssY;
+    const ordinaryTargetCss = 44;
+    const gapCss = 4;
+    // Preserve room for the three status rows before allocating the four action cards.
+    const ordinaryCss = Math.min(ordinaryTargetCss,
+      Math.max(38, (railCssHeight - 128 - gapCss * 4) / 4));
+    const ordinaryHeight = ordinaryCss * localPerCssY;
+    const gap = gapCss * localPerCssY;
+    const todayHeight = Math.max(1, railHeight - ordinaryHeight * 4 - gap * 4);
+    let cursor = 850 / 2 - railHeight * 0.0352;
+    for (const card of this.sideCards) {
+      const height = card.kind === 'today' ? todayHeight : ordinaryHeight;
+      card.node.setPosition(221, cursor - height / 2);
+      card.node.getComponent(UITransform)?.setContentSize(248, height);
+      this.paintInfoCardFrame(card.frame, height, card.kind === 'gift');
+      const markScale = card.kind === 'gift' ? 22 * unitsPerCssPixel / 44 : 1;
+      card.mark.setScale(markScale, markScale / workspaceScale, 1);
+      if (card.kind === 'today') {
+        const headerY = height / 2 - 24 * localPerCssY;
+        card.mark.setPosition(card.mark.position.x, headerY);
+        card.title.node.setPosition(card.title.node.position.x, headerY);
+        const visibleHeightCss = height / localPerCssY;
+        const rowsTop = visibleHeightCss / 2 - 40;
+        const rowsBottom = -visibleHeightCss / 2 + 8;
+        card.rows.forEach((row, index) => {
+          row.setPosition(0, (rowsTop - (index + 0.5) * (rowsTop - rowsBottom) / 3) * localPerCssY);
+          row.getChildByName('StatusIcon')?.setScale(1, 1 / workspaceScale, 1);
+        });
+      } else if (card.subtitle) {
+        const titleCss = card.title.fontSize / unitsPerCssPixel;
+        const subtitleCss = card.subtitle.fontSize / unitsPerCssPixel;
+        const titleLineCss = titleCss * (card.kind === 'lab' ? 1.08 : 1.1);
+        const subtitleLineCss = subtitleCss * 1.35;
+        const preferredGapCss = (cssHeight <= 740 ? 4 : 8) * cssWidth / 750;
+        const copyGapCss = Math.max(0, Math.min(preferredGapCss,
+          ordinaryCss - titleLineCss - subtitleLineCss - 2));
+        card.title.node.setPosition(card.title.node.position.x,
+          (subtitleLineCss + copyGapCss) * localPerCssY / 2);
+        card.subtitle.node.setPosition(card.subtitle.node.position.x,
+          -(titleLineCss + copyGapCss) * localPerCssY / 2);
+        card.title.node.getComponent(UITransform)?.setContentSize(146,
+          titleLineCss * unitsPerCssPixel);
+        card.subtitle.node.getComponent(UITransform)?.setContentSize(146,
+          subtitleLineCss * unitsPerCssPixel);
+      }
+      cursor -= height + gap;
+    }
   }
 
   public defaultSlot(): number {
@@ -132,6 +359,7 @@ export class HomeController extends Component {
     const remaining = pack ? countAvailableSlots(pack) : 0;
     this.inventoryCaptionLabel.string = pack ? '本盒剩余' : '烟盒状态';
     this.packStatusLabel.string = pack ? `${remaining}/10` : '--';
+    this.layoutInventoryValue(this.cssPixelScale());
     this.inventoryUnitLabel.string = pack ? '支' : '';
     for (let index = 0; index < this.inventorySegments.length; index += 1) {
       const segment = this.inventorySegments[index];
@@ -168,6 +396,10 @@ export class HomeController extends Component {
     }
     this.startButton.interactable = !!pack && !this.lidAnimating;
     this.startButtonLabel.string = pack === null ? '烟盒不可用' : remaining > 0 ? '来一根' : '补一盒';
+    const cssWidth = screen.windowSize.width / (screen.devicePixelRatio || 1);
+    this.startButtonLabel.fontSize = (pack === null ? 46 : 62)
+      * cssWidth / 750 * this.cssPixelScale();
+    this.startButtonLabel.lineHeight = this.startButtonLabel.fontSize * 1.05;
     this.paintStartSweep();
     this.refreshSlotVisibility();
   }
@@ -293,21 +525,23 @@ export class HomeController extends Component {
     this.backgroundTexture = new CanvasTexture('HomeBackground', this.node, DESIGN_WIDTH, Math.max(DESIGN_HEIGHT, view.getVisibleSize().height));
     this.refreshBackground(view.getVisibleSize().height);
     this.contentRoot = createNode('HomeContent', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.buildBottomTabBar();
     this.headerRoot = createNode('HomeTopbar', this.contentRoot, 690, 76);
-    createLabel('Brand', this.headerRoot, '来 一 根 再 说', 24, Palette.gold, 500, 50);
-    createLabel('RewardHint', this.headerRoot, '今日也要照顾好自己', 15, Palette.goldMuted, 280, 32, -185, -30);
+    // V1.0.8's topbar has the settings/guide controls, not a second title banner.
     this.buildSettingsButton(this.headerRoot);
 
+    // V1.0.8 effective rule: the four-way quick bar is 56 CSS px at the
+    // 375 px phone baseline, i.e. 112 units in this 750-wide design space.
     this.quickRoot = this.createChamferedPanel('HomeQuickActions', this.contentRoot,
-      690, 128, 15, '#111414', '#4a4338');
+      690, 112, 15, '#111414', '#4a4338');
     const quickActions = ['打卡', '戒烟', '收烟榜', '成就'] as const;
     quickActions.forEach((title, index) => this.buildQuickAction(title, index));
 
     this.noticeRoot = createNode('HomeNotices', this.contentRoot, 690, 220);
     const announcement = createRect('AnnouncementBar', this.noticeRoot, 690, 88,
       '#101211', 0, 66, 0, '#3f3b34');
-    createLabel('AnnouncementTag', announcement, '公告', 24, Palette.gold, 92, 52, -280);
-    createLabel('Announcement', announcement, '限定首发 · 王溪 WANG·XI', 26,
+    this.announcementTagLabel = createLabel('AnnouncementTag', announcement, '公告', 24, Palette.gold, 92, 52, -280);
+    this.announcementLabel = createLabel('Announcement', announcement, '限定首发 · 王溪 WANG·XI', 26,
       Palette.goldMuted, 520, 60, 35);
     this.inventoryCaptionLabel = createLabel('InventoryCaption', this.noticeRoot, '本盒剩余',
       25, '#d1b38b', 150, 32, -274, -27);
@@ -328,27 +562,33 @@ export class HomeController extends Component {
     // 61.5% pack column + 18 rpx gap leaves a 248 rpx side rail whose right
     // edge is exactly the quick bar/achievement edge at x=345.
     const sideRailX = 221;
-    this.smokedCountLabel = this.buildInfoCard('抽烟记录', '累计已抽 0 根', sideRailX, 300, 'records', 96);
-    this.buildInfoCard('烟雾实验室', '调整烟雾效果', sideRailX, 196, 'lab', 96);
-    this.buildInfoCard('换一盒', '更换当前烟盒', sideRailX, 92, 'switch', 96);
-    this.buildInfoCard('今日状态', '今天也要少抽一点', sideRailX, -104, 'today', 280);
-    this.buildInfoCard('派烟', '查看这根烟', sideRailX, -300, 'gift', 96);
-    createLabel('PackSwitchHint', this.workspaceRoot, '‹    左右滑动换一盒 · 1 / 1    ›',
-      20, '#b0b6ab', 424, 44, -133, -385);
+    // In the old pack, the 95.4%-high rail starts at the workbench top and is
+    // translated down by 3.52% of its own height. On this 850-unit workbench
+    // its visible top/bottom are +396/-414, matching the scaled pack artwork.
+    // Four 44 px action cards keep 4 px gaps; Today's status fills the remainder.
+    const sideRailTop = 850 / 2 - 850 * 0.954 * 0.0352;
+    const sideRailOffset = sideRailTop - 376;
+    this.smokedCountLabel = this.buildInfoCard('记录', '累计已抽 0 根', sideRailX, 332 + sideRailOffset, 'records', 88);
+    this.buildInfoCard('烟雾实验室', '打卡2天解锁', sideRailX, 236 + sideRailOffset, 'lab', 88);
+    this.buildInfoCard('换一盒', '选择烟盒', sideRailX, 140 + sideRailOffset, 'switch', 88);
+    this.buildInfoCard('今日状态', '', sideRailX, -126 + sideRailOffset, 'today', 428);
+    this.buildInfoCard('派烟', '', sideRailX, -392 + sideRailOffset, 'gift', 88);
+    this.buildPackNavigation();
 
     this.footerRoot = createNode('HomeFooter', this.contentRoot, 690, 260);
-    createLabel('Slogan', this.footerRoot, '每一次线下克制，都是在靠近更好的自己',
-      19, Palette.goldMuted, 620, 42, 0, 102);
+    this.sloganLabel = createLabel('Slogan', this.footerRoot, '“每一次线下克制，都是在靠近更好的自己”',
+      22, Palette.goldMuted, 620, 42, 0, 85);
     const startRoot = this.createChamferedPanel('StartButton', this.footerRoot,
-      690, 128, 20, '#111214', '#4b4945');
+      690, 112, 20, '#111214', '#4b4945');
+    this.startRoot = startRoot;
     this.startButton = startRoot.addComponent(Button);
     this.startButton.transition = Button.Transition.SCALE;
     this.startButton.zoomScale = 0.96;
-    const metal = new CanvasTexture('StartMetal', startRoot, 682, 120);
+    const metal = new CanvasTexture('StartMetal', startRoot, 682, 104);
     this.filterTextures.push(metal);
     metal.redraw((ctx) => {
       const width = 682;
-      const height = 120;
+      const height = 104;
       const cut = 18;
       ctx.beginPath();
       ctx.moveTo(-width / 2 + cut, height / 2);
@@ -376,11 +616,11 @@ export class HomeController extends Component {
       ctx.fillStyle = shine;
       ctx.fillRect(-width / 2, -height / 2, width, height);
     });
-    const inner = new CanvasTexture('StartInner', startRoot, 650, 94);
+    const inner = new CanvasTexture('StartInner', startRoot, 650, 78);
     this.filterTextures.push(inner);
     inner.redraw((ctx) => {
       const width = 650;
-      const height = 94;
+      const height = 78;
       const cut = 16;
       const trace = (): void => {
         ctx.beginPath();
@@ -421,11 +661,11 @@ export class HomeController extends Component {
       ctx.stroke();
     });
     this.startButtonLabel = createLabel('Label', startRoot, '来一根', 62,
-      '#ffe0a2', 620, 112);
+      '#ffe0a2', 620, 96);
     // Keep one string owner, but render base text and sweep into one Canvas so
     // font metrics cannot drift and create a visible doubled glyph.
     this.startButtonLabel.node.active = false;
-    this.startSweep = new CanvasTexture('StartLabelSweep', startRoot, 620, 112);
+    this.startSweep = new CanvasTexture('StartLabelSweep', startRoot, 620, 96);
     this.buildStartArrows(startRoot);
     this.buildStartBolts(startRoot);
     startRoot.on(Button.EventType.CLICK, () => {
@@ -433,12 +673,111 @@ export class HomeController extends Component {
       if (!this.pack.lidOpen) this.beginOpenLid(true);
       else this.startDefaultSlot();
     });
-    createLabel('Footer', this.footerRoot, '鼠标长按画面进行点火与吸入',
-      15, Palette.muted, 560, 32, 0, -84);
-    this.secondaryNodes = [this.headerRoot, this.quickRoot, this.noticeRoot, this.footerRoot,
-      ...this.workspaceRoot.children.filter((child) => child !== this.packRoot)];
+    this.secondaryNodes = [this.headerRoot, this.quickRoot, this.noticeRoot, this.footerRoot, this.bottomTabRoot,
+      this.packNavigation, ...this.workspaceRoot.children.filter((child) => child !== this.packRoot)];
     for (const node of this.secondaryNodes) this.collectSecondaryOpacity(node);
     this.refreshLayout();
+  }
+
+  /** V1.0.8 custom tab bar: visual-only in this demo; both buttons intentionally have no handler. */
+  private buildBottomTabBar(): void {
+    this.bottomTabRoot = createNode('HomeBottomTabs', this.node, DESIGN_WIDTH, 57);
+    this.bottomTabRoot.addComponent(BlockInputEvents);
+    this.bottomTabGraphics = this.bottomTabRoot.addComponent(Graphics);
+    alignWidget(this.bottomTabRoot, { left: 0, right: 0, bottom: 0 });
+
+    this.homeTabRoot = createNode('HomeTab', this.bottomTabRoot, DESIGN_WIDTH / 2, 48);
+    this.homeTabRoot.addComponent(Button).transition = Button.Transition.NONE;
+    this.homeTabIcon = createNode('CigaretteIcon', this.homeTabRoot, 24, 24);
+    this.paintTabCigarette(this.homeTabIcon.addComponent(Graphics), true);
+    this.homeTabLabel = createLabel('Label', this.homeTabRoot, '来一根', 11,
+      '#f0c58b', DESIGN_WIDTH / 2, 15);
+
+    this.worldTabRoot = createNode('WorldTab', this.bottomTabRoot, DESIGN_WIDTH / 2, 48);
+    this.worldTabRoot.addComponent(Button).transition = Button.Transition.NONE;
+    this.worldTabIcon = createNode('GlobeIcon', this.worldTabRoot, 24, 24);
+    this.paintTabGlobe(this.worldTabIcon.addComponent(Graphics), false);
+    this.worldTabLabel = createLabel('Label', this.worldTabRoot, '全服', 11,
+      '#aa9b87', DESIGN_WIDTH / 2, 15);
+  }
+
+  private refreshBottomTabLayout(unit: number): void {
+    if (!this.bottomTabRoot || Math.abs(this.bottomTabUnit - unit) < 0.001) return;
+    this.bottomTabUnit = unit;
+    const height = 57 * unit;
+    const itemHeight = 48 * unit;
+    this.bottomTabRoot.getComponent(UITransform)?.setContentSize(DESIGN_WIDTH, height);
+    this.bottomTabRoot.getComponent(Widget)?.updateAlignment();
+
+    this.bottomTabGraphics.clear();
+    this.bottomTabGraphics.fillColor = color('#0d1010');
+    this.bottomTabGraphics.rect(-DESIGN_WIDTH / 2, -height / 2, DESIGN_WIDTH, height);
+    this.bottomTabGraphics.fill();
+    this.bottomTabGraphics.fillColor = color('#514739');
+    this.bottomTabGraphics.rect(-DESIGN_WIDTH / 2, height / 2 - unit, DESIGN_WIDTH, unit);
+    this.bottomTabGraphics.fill();
+    this.bottomTabGraphics.fillColor = color('#f06013');
+    this.bottomTabGraphics.rect(-DESIGN_WIDTH / 4 - 12 * unit,
+      height / 2 - 2 * unit, 24 * unit, 2 * unit);
+    this.bottomTabGraphics.fill();
+
+    const itemCenterY = height / 2 - 28 * unit;
+    for (const [node, x] of [[this.homeTabRoot, -DESIGN_WIDTH / 4],
+      [this.worldTabRoot, DESIGN_WIDTH / 4]] as Array<[Node, number]>) {
+      node.getComponent(UITransform)?.setContentSize(DESIGN_WIDTH / 2, itemHeight);
+      node.setPosition(x, itemCenterY);
+    }
+    this.homeTabIcon.setPosition(0, 8 * unit);
+    this.worldTabIcon.setPosition(0, 8 * unit);
+    this.homeTabIcon.setScale(unit, unit, 1);
+    this.worldTabIcon.setScale(unit, unit, 1);
+    for (const label of [this.homeTabLabel, this.worldTabLabel]) {
+      label.fontSize = 11 * unit;
+      label.lineHeight = 15 * unit;
+      label.node.getComponent(UITransform)?.setContentSize(DESIGN_WIDTH / 2, 15 * unit);
+      label.node.setPosition(0, -10 * unit);
+    }
+  }
+
+  private cssPixelScale(): number {
+    const cssWidth = screen.windowSize.width / (screen.devicePixelRatio || 1);
+    return cssWidth > 0 ? view.getVisibleSize().width / cssWidth : 1;
+  }
+
+  private paintTabCigarette(graphics: Graphics, selected: boolean): void {
+    graphics.strokeColor = color('#cbb47d', selected ? 255 : 166);
+    graphics.lineWidth = 1.3;
+    graphics.lineCap = Graphics.LineCap.ROUND;
+    graphics.lineJoin = Graphics.LineJoin.ROUND;
+    graphics.rect(-9, -9, 15, 4);
+    graphics.moveTo(2, -9);
+    graphics.lineTo(2, -5);
+    graphics.moveTo(10, -9);
+    graphics.lineTo(10, -5);
+    graphics.moveTo(6, -9);
+    graphics.lineTo(8, -9);
+    graphics.lineTo(8, -5);
+    graphics.moveTo(2, 0);
+    graphics.bezierCurveTo(6, 3, -2, 4, 2, 7);
+    graphics.moveTo(7, 0);
+    graphics.bezierCurveTo(11, 3, 3, 5, 7, 9);
+    graphics.stroke();
+  }
+
+  private paintTabGlobe(graphics: Graphics, selected: boolean): void {
+    graphics.strokeColor = color('#cbb47d', selected ? 255 : 166);
+    graphics.lineWidth = 1.3;
+    graphics.lineCap = Graphics.LineCap.ROUND;
+    graphics.lineJoin = Graphics.LineJoin.ROUND;
+    graphics.circle(0, 0, 9);
+    graphics.ellipse(0, 0, 4, 9);
+    graphics.moveTo(-9, 0);
+    graphics.lineTo(9, 0);
+    graphics.moveTo(-7, 5);
+    graphics.lineTo(7, 5);
+    graphics.moveTo(-7, -5);
+    graphics.lineTo(7, -5);
+    graphics.stroke();
   }
 
   /** Confirmed visual target: 108° gold band moving from left to right. */
@@ -452,8 +791,9 @@ export class HomeController extends Component {
       ctx.scale(1, -1);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '780 62px "Microsoft YaHei UI", sans-serif';
-      const spacing = 62 * 0.11;
+      const fontSize = this.startButtonLabel.fontSize;
+      ctx.font = `780 ${fontSize}px "PingFang SC", "Microsoft YaHei UI", sans-serif`;
+      const spacing = fontSize * 0.11;
       const characters = Array.from(label);
       const widths = characters.map((character) => ctx.measureText(character).width);
       const totalWidth = widths.reduce((sum, width) => sum + width, 0)
@@ -475,17 +815,19 @@ export class HomeController extends Component {
       drawText();
       ctx.shadowColor = 'rgba(0,0,0,0)';
       ctx.shadowBlur = 0;
-      const center = -360 + 720 * phase;
-      const gradient = ctx.createLinearGradient(center - 112, 20, center + 112, -20);
-      gradient.addColorStop(0, 'rgba(255,251,228,0)');
-      gradient.addColorStop(0.38, 'rgba(255,251,228,0)');
-      gradient.addColorStop(0.46, '#fffbe4');
-      gradient.addColorStop(0.51, '#fff2b2');
-      gradient.addColorStop(0.55, '#ffd766');
-      gradient.addColorStop(0.63, 'rgba(255,215,102,0)');
-      gradient.addColorStop(1, 'rgba(255,215,102,0)');
-      ctx.fillStyle = gradient;
-      drawText();
+      if (this.pack) {
+        const center = -360 + 720 * phase;
+        const gradient = ctx.createLinearGradient(center - 112, 20, center + 112, -20);
+        gradient.addColorStop(0, 'rgba(255,251,228,0)');
+        gradient.addColorStop(0.38, 'rgba(255,251,228,0)');
+        gradient.addColorStop(0.46, '#fffbe4');
+        gradient.addColorStop(0.51, '#fff2b2');
+        gradient.addColorStop(0.55, '#ffd766');
+        gradient.addColorStop(0.63, 'rgba(255,215,102,0)');
+        gradient.addColorStop(1, 'rgba(255,215,102,0)');
+        ctx.fillStyle = gradient;
+        drawText();
+      }
       ctx.restore();
     });
   }
@@ -496,15 +838,16 @@ export class HomeController extends Component {
       const graphic = node.addComponent(Graphics);
       graphic.strokeColor = color('#2b160c');
       graphic.lineWidth = 5;
-      for (const offset of [-6, 6]) {
+      graphic.lineJoin = Graphics.LineJoin.MITER;
+      for (const offset of [-5.5, 5.5]) {
         if (pointsRight) {
-          graphic.moveTo(offset - 5, 8);
-          graphic.lineTo(offset + 3, 0);
-          graphic.lineTo(offset - 5, -8);
+          graphic.moveTo(offset - 5.5, 10.5);
+          graphic.lineTo(offset + 5, 0);
+          graphic.lineTo(offset - 5.5, -10.5);
         } else {
-          graphic.moveTo(offset + 5, 8);
-          graphic.lineTo(offset - 3, 0);
-          graphic.lineTo(offset + 5, -8);
+          graphic.moveTo(offset + 5.5, 10.5);
+          graphic.lineTo(offset - 5, 0);
+          graphic.lineTo(offset + 5.5, -10.5);
         }
       }
       graphic.stroke();
@@ -515,8 +858,8 @@ export class HomeController extends Component {
 
   private buildStartBolts(parent: Node): void {
     const positions = [
-      ['TopLeft', -318.5, 41.5], ['TopRight', 318.5, 41.5],
-      ['BottomLeft', -318.5, -39.5], ['BottomRight', 318.5, -39.5],
+      ['TopLeft', -318.5, 33.5], ['TopRight', 318.5, 33.5],
+      ['BottomLeft', -318.5, -31.5], ['BottomRight', 318.5, -31.5],
     ] as const;
     for (const [name, x, y] of positions) {
       const bolt = createNode(`Bolt${name}`, parent, 15, 15, x, y).addComponent(Graphics);
@@ -538,9 +881,10 @@ export class HomeController extends Component {
     const packRoot = createNode('PackRoot', this.workspaceRoot, boxWidth, boxHeight, -133, 0);
     this.packRoot = packRoot;
     packRoot.on(Node.EventType.TOUCH_END, () => this.beginOpenLid(false));
-    // The old pack is anchored in a 48vh workbench; grow downward while keeping its top near the header.
-    // Legacy pack-box is 86% of the 61.5% left column: about 365/690 wide.
-    packRoot.setScale(1.105, 1.23, 1);
+    // Legacy pack-box is 86% of the 61.5% left column, then the active pack is
+    // enlarged by 1.06. That yields about 387/690 rendered width. Its 48vh
+    // workbench also makes the opened pack noticeably taller than the first pass.
+    packRoot.setScale(1.17, 1.5, 1);
     const yFromTop = (fraction: number): number => boxHeight * (0.5 - fraction);
     const bodyWidth = boxWidth * 0.84;
     const bodyX = boxWidth * (0.13 + 0.84 / 2 - 0.5);
@@ -920,104 +1264,303 @@ export class HomeController extends Component {
   }
 
   private buildSettingsButton(parent: Node): void {
-    const node = createNode('Settings', parent, 88, 88, 292, 0);
+    // Right edge follows the quick bar/side-rail edge at x=345.
+    const node = createNode('Settings', parent, 88, 88, 301, 0);
+    this.settingsRoot = node;
     node.addComponent(Button).transition = Button.Transition.NONE;
     const graphic = node.addComponent(Graphics);
     graphic.strokeColor = color('#c6b69f');
+    graphic.fillColor = color('#c6b69f');
     graphic.lineWidth = 4;
-    graphic.circle(0, 0, 22);
-    graphic.circle(0, 0, 8);
     for (let index = 0; index < 8; index += 1) {
       const angle = index * Math.PI / 4;
-      graphic.moveTo(Math.cos(angle) * 27, Math.sin(angle) * 27);
-      graphic.lineTo(Math.cos(angle) * 34, Math.sin(angle) * 34);
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      const tx = -dy * 3.5;
+      const ty = dx * 3.5;
+      graphic.moveTo(dx * 25 + tx, dy * 25 + ty);
+      graphic.lineTo(dx * 34 + tx, dy * 34 + ty);
+      graphic.lineTo(dx * 34 - tx, dy * 34 - ty);
+      graphic.lineTo(dx * 25 - tx, dy * 25 - ty);
+      graphic.close();
+      graphic.fill();
     }
+    graphic.circle(0, 0, 22);
+    graphic.circle(0, 0, 8);
     graphic.stroke();
   }
 
   private buildQuickAction(title: string, index: number): void {
     const width = 690 / 4;
     const x = -690 / 2 + width * (index + 0.5);
-    const action = createNode(`Quick${title}`, this.quickRoot, width, 128, x, 0);
+    const action = createNode(`Quick${title}`, this.quickRoot, width, 112, x, 0);
     action.addComponent(Button).transition = Button.Transition.NONE;
-    if (index > 0) createRect('Divider', action, 1, 92, '#514839', -width / 2, 0);
-    const iconNode = createNode('Icon', action, 50, 50, 0, 22);
+    if (index > 0) createRect('Divider', action, 1, 80, '#514839', -width / 2, 0);
+    const iconNode = createNode('Icon', action, 50, 50, 0, 18);
+    this.quickIcons.push(iconNode);
     const icon = iconNode.addComponent(Graphics);
     icon.strokeColor = color('#c9aa7e');
     icon.fillColor = color('#c9aa7e');
     icon.lineWidth = 3;
     if (index === 0) {
-      icon.roundRect(-15, -13, 30, 27, 4);
+      // Legacy quick-icon-checkin: bound calendar with two top tabs.
+      icon.roundRect(-16, -15, 32, 30, 6);
       icon.stroke();
-      icon.moveTo(-8, 1); icon.lineTo(-2, -5); icon.lineTo(9, 7); icon.stroke();
+      icon.roundRect(-11, 14, 4, 12, 2);
+      icon.roundRect(5, 14, 4, 12, 2);
+      icon.fill();
+      icon.lineWidth = 4;
+      icon.moveTo(-8, -1); icon.lineTo(-2, -7); icon.lineTo(10, 6); icon.stroke();
     } else if (index === 1) {
-      icon.circle(0, 0, 15); icon.stroke();
-      icon.moveTo(-11, -11); icon.lineTo(11, 11); icon.stroke();
+      // Legacy quick-icon-quit: prohibition ring, cigarette and slash.
+      icon.circle(0, 0, 16); icon.stroke();
+      icon.lineWidth = 2;
+      icon.rect(-12, -4, 18, 7); icon.stroke();
+      icon.rect(-12, -4, 5, 7); icon.fill();
+      icon.lineWidth = 3;
+      icon.moveTo(-12, -13); icon.lineTo(12, 13); icon.stroke();
     } else if (index === 2) {
-      icon.moveTo(-16, -10); icon.lineTo(16, -10); icon.lineTo(11, 12);
-      icon.lineTo(-11, 12); icon.close(); icon.stroke();
-      icon.circle(0, 3, 4); icon.fill();
+      // Legacy quick-icon-ranking: three ascending bars over one baseline.
+      icon.rect(-13, -14, 6, 11);
+      icon.rect(-3, -14, 6, 17);
+      icon.rect(7, -14, 6, 24);
+      icon.fill();
+      icon.moveTo(-16, -15); icon.lineTo(16, -15); icon.stroke();
     } else {
+      // Legacy quick-icon-achievement: round medal, star and twin ribbons.
+      icon.circle(0, 4, 16); icon.stroke();
       const points: Array<[number, number]> = [];
       for (let point = 0; point < 10; point += 1) {
         const angle = Math.PI / 2 + point * Math.PI / 5;
-        const radius = point % 2 === 0 ? 16 : 7;
-        points.push([Math.cos(angle) * radius, Math.sin(angle) * radius]);
+        const radius = point % 2 === 0 ? 7 : 3;
+        points.push([Math.cos(angle) * radius, 4 + Math.sin(angle) * radius]);
       }
       icon.moveTo(points[0][0], points[0][1]);
       for (const [px, py] of points.slice(1)) icon.lineTo(px, py);
-      icon.close(); icon.stroke();
+      icon.close(); icon.fill();
+      icon.moveTo(-12, -8); icon.lineTo(-12, -24); icon.lineTo(-5, -20);
+      icon.lineTo(0, -25); icon.lineTo(0, -13);
+      icon.moveTo(12, -8); icon.lineTo(12, -24); icon.lineTo(5, -20);
+      icon.lineTo(0, -25); icon.stroke();
     }
-    createLabel('Title', action, title, 27, '#d3bea0', width - 12, 40, 0, -38);
+    const label = createLabel('Title', action, title, 27, '#d3bea0', width - 12, 40, 0, -34);
+    label.lineHeight = 27;
+    label.isBold = true;
+    this.quickLabels.push(label);
+  }
+
+  private buildPackNavigation(): void {
+    const navigation = createNode('PackSwitchNavigation', this.contentRoot, 424, 88, -133, 0);
+    this.packNavigation = navigation;
+    const drawArrow = (name: string, x: number, previous: boolean): void => {
+      const arrow = createNode(name, navigation, 88, 88, x);
+      arrow.addComponent(Button).transition = Button.Transition.NONE;
+      this.packSwitchArrows.push(arrow);
+      const mark = arrow.addComponent(Graphics);
+      mark.strokeColor = color('#c2b590');
+      mark.lineWidth = 2;
+      mark.moveTo(previous ? 5 : -5, 10);
+      mark.lineTo(previous ? -5 : 5, 0);
+      mark.lineTo(previous ? 5 : -5, -10);
+      mark.stroke();
+    };
+    drawArrow('PreviousPack', -168, true);
+    this.packSwitchCaption = createLabel('PackSwitchCaption', navigation,
+      '左右滑动换一盒 · 1 / 1', 22, '#b0b6ab', 248, 44);
+    // Keep the old single-line hint inside the flexible space between 44px arrows.
+    this.packSwitchCaption.overflow = Label.Overflow.SHRINK;
+    this.packSwitchCaption.enableWrapText = false;
+    drawArrow('NextPack', 168, false);
   }
 
   private buildInfoCard(title: string, value: string, x: number, y: number,
-    iconKind: 'records' | 'lab' | 'switch' | 'today' | 'gift', height = 84): Label {
+    iconKind: SideCardKind, height = 84): Label {
     const cardWidth = 248;
-    const cardHalf = cardWidth / 2;
     const card = createNode(title, this.workspaceRoot, cardWidth, height, x, y);
-    card.addComponent(Button).transition = Button.Transition.NONE;
+    if (iconKind !== 'today') card.addComponent(Button).transition = Button.Transition.NONE;
     const frame = card.addComponent(Graphics);
-    const cut = 12;
-    frame.moveTo(-cardHalf + cut, height / 2);
-    frame.lineTo(cardHalf - cut, height / 2);
-    frame.lineTo(cardHalf, height / 2 - cut);
-    frame.lineTo(cardHalf, -height / 2 + cut);
-    frame.lineTo(cardHalf - cut, -height / 2);
-    frame.lineTo(-cardHalf + cut, -height / 2);
-    frame.lineTo(-cardHalf, -height / 2 + cut);
-    frame.lineTo(-cardHalf, height / 2 - cut);
-    frame.close();
-    frame.fillColor = color(iconKind === 'gift' ? '#171713' : '#111310');
-    frame.fill();
-    frame.strokeColor = color(iconKind === 'gift' ? '#6b573c' : '#554831');
-    frame.lineWidth = 2;
-    frame.stroke();
-    const mark = createNode('Mark', card, 48, 48, -82, iconKind === 'today' ? 22 : 0).addComponent(Graphics);
+    this.paintInfoCardFrame(frame, height, iconKind === 'gift');
+    const todayHeaderY = height / 2 - 46;
+    const mark = createNode('Mark', card, 49, 55, iconKind === 'gift' ? -34 : -82,
+      iconKind === 'today' ? todayHeaderY : 0).addComponent(Graphics);
     mark.strokeColor = color('#d8a85f');
     mark.fillColor = color('#d8a85f');
     mark.lineWidth = 3;
     if (iconKind === 'records') {
-      mark.roundRect(-18, -20, 36, 40, 5); mark.stroke();
-      for (const yy of [-10, 0, 10]) { mark.moveTo(-8, yy); mark.lineTo(10, yy); }
+      mark.lineWidth = 4;
+      mark.roundRect(-19, -24, 38, 48, 7); mark.stroke();
+      mark.lineWidth = 3;
+      mark.moveTo(-12, -16); mark.lineTo(-12, 16);
+      for (const yy of [-8, 0, 8]) { mark.moveTo(-5, yy); mark.lineTo(12, yy); }
       mark.stroke();
     } else if (iconKind === 'lab') {
-      mark.moveTo(-8, 19); mark.lineTo(8, 19); mark.lineTo(8, 6);
-      mark.lineTo(18, -17); mark.lineTo(-18, -17); mark.lineTo(-8, 6); mark.close(); mark.stroke();
+      this.paintSmokeLabIcon(mark.node);
     } else if (iconKind === 'switch') {
-      mark.moveTo(-19, 8); mark.lineTo(13, 8); mark.lineTo(6, 15);
-      mark.moveTo(19, -8); mark.lineTo(-13, -8); mark.lineTo(-6, -15); mark.stroke();
+      this.paintSwitchArrows(mark);
     } else if (iconKind === 'today') {
-      mark.circle(0, 0, 17); mark.stroke(); mark.circle(0, 0, 5); mark.fill();
+      this.paintStatusPulse(mark);
     } else {
-      mark.moveTo(-18, -8); mark.lineTo(18, -8); mark.lineTo(12, 13);
-      mark.lineTo(-12, 13); mark.close(); mark.stroke();
+      this.paintGiftIcon(mark.node);
     }
-    const textX = 33;
-    const titleSize = iconKind === 'lab' ? 26 : iconKind === 'gift' ? 28 : 30;
-    createLabel('Title', card, title, titleSize, Palette.gold, 146, 38, textX,
-      iconKind === 'today' ? 24 : 15);
-    return createLabel('Value', card, value, 24, '#a1aaa4', 146,
-      iconKind === 'today' ? 110 : 34, textX, iconKind === 'today' ? -40 : -20);
+    if (iconKind === 'gift') {
+      const giftTitle = createLabel('Title', card, title, 28, Palette.gold,
+        64, 38, 26, 0, HorizontalTextAlignment.LEFT);
+      giftTitle.isBold = true;
+      this.actionTitles.push({ label: giftTitle, rpx: 28, minimumPx: 14, copyOffsetY: 0 });
+      this.sideCards.push({ node: card, frame, mark: mark.node, kind: iconKind,
+        title: giftTitle, subtitle: null, rows: [] });
+      return giftTitle;
+    }
+    const titleSize = iconKind === 'lab' ? 26 : 30;
+    const titleLabel = createLabel('Title', card, title, titleSize, '#e6d6c0',
+      146, 38, 33, iconKind === 'today' ? todayHeaderY : 20,
+      HorizontalTextAlignment.LEFT);
+    titleLabel.isBold = true;
+    this.actionTitles.push({ label: titleLabel, rpx: titleSize,
+      minimumPx: iconKind === 'lab' ? 13 : 0, copyOffsetY: iconKind === 'today' ? null : 20 });
+    if (iconKind === 'today') {
+      const rows = [
+        this.buildTodayStatusRow(card, 'LastSmoke', '上次抽烟', 76),
+        this.buildTodayStatusRow(card, 'TodaySmoked', '今日已抽', -30),
+        this.buildTodayStatusRow(card, 'CheckinStreak', '连续打卡', -136),
+      ];
+      this.sideCards.push({ node: card, frame, mark: mark.node, kind: iconKind,
+        title: titleLabel, subtitle: null, rows });
+      return titleLabel;
+    }
+    const subtitle = createLabel('Value', card, value, 24, '#a58f74',
+      146, 34, 33, -20, HorizontalTextAlignment.LEFT);
+    this.actionSubtitles.push(subtitle);
+    this.sideCards.push({ node: card, frame, mark: mark.node, kind: iconKind,
+      title: titleLabel, subtitle, rows: [] });
+    return subtitle;
+  }
+
+  private paintSwitchArrows(mark: Graphics): void {
+    // V1.0.8 switch-pack-mark uses two filled 43 × 16 rpx arrows.
+    const arrow = (cy: number, right: boolean): void => {
+      const points: Array<[number, number]> = [
+        [-21.5, -2], [8.5, -2], [8.5, -8], [21.5, 0],
+        [8.5, 8], [8.5, 2], [-21.5, 2],
+      ];
+      const mapped = points.map(([px, py]): [number, number] =>
+        [right ? px : -px, py + cy]);
+      mark.moveTo(mapped[0][0], mapped[0][1]);
+      for (const [px, py] of mapped.slice(1)) mark.lineTo(px, py);
+      mark.close();
+      mark.fill();
+    };
+    arrow(10, true);
+    arrow(-10, false);
+  }
+
+  private paintStatusPulse(mark: Graphics): void {
+    // Filled CSS pulse polygon, reduced to its centerline at 49 × 36 rpx.
+    const points: Array<[number, number]> = [
+      [-24, 0], [-16, 0], [-12, 11], [-7, -6], [-3, 17],
+      [3, 2], [6, 9], [12, -3], [16, 0], [24, 0],
+    ];
+    mark.lineWidth = 4;
+    mark.lineJoin = Graphics.LineJoin.ROUND;
+    mark.moveTo(points[0][0], points[0][1]);
+    for (const [px, py] of points.slice(1)) mark.lineTo(px, py);
+    mark.stroke();
+    mark.moveTo(-24, -2);
+    for (const [px, py] of points.slice(1)) mark.lineTo(px, py - 2);
+    mark.stroke();
+  }
+
+  private paintSmokeLabIcon(parent: Node): void {
+    // The original /assets/icons/smoke-lab.svg has three translucent plumes,
+    // not the flask used by the first Cocos approximation.
+    const texture = new CanvasTexture('SmokeLabSvg', parent, 49, 55);
+    this.filterTextures.push(texture);
+    texture.redraw((ctx) => {
+      const scale = Math.min(49 / 36, 55 / 40);
+      ctx.save();
+      ctx.translate(-18 * scale, 20 * scale);
+      ctx.scale(scale, -scale);
+      const center = ctx.createLinearGradient(18, 3, 18, 35);
+      center.addColorStop(0, 'rgba(173,150,204,.95)');
+      center.addColorStop(.55, 'rgba(173,150,204,.8)');
+      center.addColorStop(1, 'rgba(173,150,204,0)');
+      ctx.fillStyle = center;
+      ctx.fill(new Path2D('M16.7 35c-3.3-4-4.3-9-3-13.7-3.5-.9-5-4-2.7-7.3-3.2-2.8-1.2-7.5 2.5-7.8.5-3.6 4.7-4.8 7.1-1.9 4-1.3 7.4 2.8 5.1 6.3 3.3 3.3 1.1 7.6-2.3 8.3C25 23.2 23 29.2 19.2 35Z'));
+      const left = ctx.createLinearGradient(8, 10, 16, 36);
+      left.addColorStop(0, 'rgba(140,184,208,.95)');
+      left.addColorStop(.5, 'rgba(140,184,208,.8)');
+      left.addColorStop(1, 'rgba(140,184,208,0)');
+      ctx.fillStyle = left;
+      ctx.fill(new Path2D('M15.5 36c-3.3-3-6-6.5-6.3-10.8-3.8 1-7.4-1.4-7-5.1-2.1-2.8-.1-6.5 3.2-6.8-.1-3.5 4-5.3 6.6-3 4-1.1 6.4 2.9 4.3 6.2 3.2 2.1 2.7 6.3-.2 8.1-1.7 3.7 2.1 7.2 2.6 11.4Z'));
+      const right = ctx.createLinearGradient(28, 12, 21, 36);
+      right.addColorStop(0, 'rgba(211,155,171,.95)');
+      right.addColorStop(.5, 'rgba(211,155,171,.8)');
+      right.addColorStop(1, 'rgba(211,155,171,0)');
+      ctx.fillStyle = right;
+      ctx.fill(new Path2D('M18.5 36c.7-4.2 3.9-6.7 3.2-10.7-3.4-1.7-3.9-5.5-1.2-7.8-.6-3.3 2.7-6.1 5.8-4.6 3-2 7.3.3 6.7 3.9 3.5 2.2 2.1 7-1.3 7.5.3 3.5-3 5.6-5.8 4.7-.9 2.7-2.7 5.2-4.4 7Z'));
+      ctx.restore();
+    });
+  }
+
+  private paintGiftIcon(parent: Node): void {
+    // Original /assets/icons/session-share.svg path in its 24 × 24 viewBox.
+    const texture = new CanvasTexture('GiftSvg', parent, 44, 44);
+    this.filterTextures.push(texture);
+    texture.redraw((ctx) => {
+      const scale = 44 / 24;
+      ctx.save();
+      ctx.translate(-12 * scale, 12 * scale);
+      ctx.scale(scale, -scale);
+      ctx.strokeStyle = '#d9bc8d';
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke(new Path2D('M3 5h17v3H3zM16 5v3M3 18l4-5h5c2 0 2 3 0 3h-2m-3-3 4-3h7c2 0 3 2 1 4l-5 5H8l-2 2M1 16l5 5'));
+      ctx.restore();
+    });
+  }
+
+  private paintInfoCardFrame(frame: Graphics, height: number, gift: boolean): void {
+    const halfWidth = 124;
+    const cut = 12;
+    frame.clear();
+    frame.moveTo(-halfWidth + cut, height / 2);
+    frame.lineTo(halfWidth - cut, height / 2);
+    frame.lineTo(halfWidth, height / 2 - cut);
+    frame.lineTo(halfWidth, -height / 2 + cut);
+    frame.lineTo(halfWidth - cut, -height / 2);
+    frame.lineTo(-halfWidth + cut, -height / 2);
+    frame.lineTo(-halfWidth, -height / 2 + cut);
+    frame.lineTo(-halfWidth, height / 2 - cut);
+    frame.close();
+    frame.fillColor = color(gift ? '#171713' : '#111310');
+    frame.fill();
+    frame.strokeColor = color(gift ? '#6b573c' : '#554831');
+    frame.lineWidth = 2;
+    frame.stroke();
+  }
+
+  private buildTodayStatusRow(parent: Node, name: string, caption: string, y: number): Node {
+    const row = createNode(name, parent, 220, 72, 0, y);
+    const mark = createNode('StatusIcon', row, 31, 31, -90, 0).addComponent(Graphics);
+    mark.strokeColor = color('#d8a85f');
+    mark.lineWidth = 2;
+    if (name === 'LastSmoke') {
+      mark.circle(0, 0, 13);
+      mark.moveTo(0, 8); mark.lineTo(0, 0); mark.lineTo(6, -4);
+    } else if (name === 'TodaySmoked') {
+      mark.circle(0, 0, 13); mark.circle(0, 0, 6); mark.circle(0, 0, 2);
+    } else {
+      mark.roundRect(-11, -10, 22, 21, 2);
+      mark.moveTo(-7, 1); mark.lineTo(-1, -5); mark.lineTo(8, 6);
+    }
+    mark.stroke();
+    const label = createLabel('StatusLabel', row, caption, 24, '#c6af90',
+      164, 30, 18, 13, HorizontalTextAlignment.LEFT);
+    const value = createLabel('StatusValue', row, '—', 24, '#c9b89f',
+      164, 30, 18, -14, HorizontalTextAlignment.LEFT);
+    this.statusLabels.push(label);
+    this.statusValues.push(value);
+    return row;
   }
 }

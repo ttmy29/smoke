@@ -1,8 +1,18 @@
 # 旧微信小程序编译包参考（只读）
 
-实际目录：`E:\json\smoke_wxd0b7dafebccb8110_unpacked`。用户先前给出的 `E:\json\smoke\_wxd0b7dafebccb8110\_unpacked` 当前不存在。
+> **当前基准（2026-09-29）：V1.0.8。**参考目录为 `E:\json\wxd0b7dafebccb8110_unpacked`。下方原“实际目录”句只记录 V1.0.7 审计来源，已不再代表当前验收版本。
 
-此包是“来一根再说”的微信小程序**编译产物**，不是 Cocos 工程，也不是可直接导入的源码。`app-config.json` 声明 `webview` 渲染和 `glass-easel` 组件框架；业务模块虽保留 `currentFile` 路径，但合并在 `appservice.app.js` 和各 `chunk_*.appservice.js` 中。新项目按行为重新实现。
+大目录是 V1.0.7 与 V1.0.8 的合并解包结果：V1.0.7 的 182 个文件仍以原名保留，V1.0.8 与旧文件冲突时多数以 `-1` 后缀保存，另有 239 个新增文件。两目录共有的 182 个路径 SHA-256 全部一致，因此不能把大目录中的无后缀旧文件误判为 V1.0.8。
+
+V1.0.8 读取规则：优先使用 `app-config-1.json`、`app-wxss-1.js`、`app-service-1.js`、`appservice.app-1.js` 和同名 `*-1` 文件；首页使用 `chunk_6.webview-1.js`、`chunk_6.appservice-1.js`。`chunk_10`～`chunk_13`、`world-tools/`、`custom-tab-bar/` 是新增内容，按原名读取。若历史审计与这些文件冲突，以 V1.0.8 为准。
+
+首页 UI 核对顺序：先从 V1.0.8 模板、最终级联样式和组件代码确定区域顺序、父子关系、百分比宽高、Flex/媒体查询、偏移与缩放，再换算至 Cocos。参考图片仅用于补齐大致区域与视觉组成，不用于量取按钮或烟盒的精确位置、宽高、间距；图片与代码不一致时以 V1.0.8 代码为准。无法从代码确认的数值应标为待确认，不从截图猜测。
+
+V1.0.8 明确包含底部自定义导航，两个入口依次为“来一根”和“全服”；“全球”是此前误述。导航视觉参数与当前仅做静态 UI、点击无效果的范围见 `requirements.md`。
+
+V1.0.7 历史审计目录：`E:\json\smoke_wxd0b7dafebccb8110_unpacked`。此前关于其他路径不存在的判断已被后续 V1.0.8 目录核对结果取代。
+
+V1.0.7 历史包与 V1.0.8 都是“来一根再说”的微信小程序**编译产物**，不是 Cocos 工程，也不是可直接导入的源码。V1.0.7 的 `app-config.json` 与 V1.0.8 的 `app-config-1.json` 声明 `webview` 渲染和 `glass-easel` 组件框架；业务模块虽保留 `currentFile` 路径，但合并在应用服务和各 `chunk_*` 中。新项目按行为重新实现。
 
 ## 与第一版相关的已确认行为
 

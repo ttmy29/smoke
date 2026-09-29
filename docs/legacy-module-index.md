@@ -1,8 +1,8 @@
 # 旧包模块／方法静态索引
 
-由 `tools/legacy-module-index.mjs` 从旧微信编译包生成；只解析代码，不运行旧包。统计排除 @swc 运行时及 vendor。详细规则见 `legacy-rules.md`，与当前实现差异见 `legacy-vs-current.md`。
+由 `tools/legacy-module-index.mjs` 从 V1.0.7 旧微信编译包生成；只解析代码，不运行旧包。统计排除 @swc 运行时及 vendor。该索引是历史快照，**尚未覆盖 V1.0.8** 新增的 `chunk_10`～`chunk_13`、`world-tools/`、`custom-tab-bar/` 等内容，不能再称为当前版本的全包索引。当前基准与选文件规则见 `legacy-reference.md`，详细规则见 `legacy-rules.md`，与当前实现差异见 `legacy-vs-current.md`。
 
-共索引 122 个模块。表中“导出”是静态可识别的公开名称；“方法”是小程序 Page/Component/App/Behavior 方法与编译后类成员名。匿名回调和未导出的内部函数不在此索引，不能将此表当成逐方法语义证明。
+V1.0.7 共索引 122 个模块。表中“导出”是静态可识别的公开名称；“方法”是小程序 Page/Component/App/Behavior 方法与编译后类成员名。匿名回调和未导出的内部函数不在此索引，不能将此表当成逐方法语义证明，也不能据此断言 V1.0.8 没有新增页面或方法。
 
 ## app（1）
 
