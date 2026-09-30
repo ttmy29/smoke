@@ -14,6 +14,22 @@ V1.0.7 历史证据文件 SHA-256：`appservice.app.js = 57B60D1D95D5B5F4F608A33
 
 静态索引计 122 个非框架模块：app 1、behaviors 1、config 2、domain 33、presentation 31、services 33、components 16、pages 5。系统不止单根交互，还含烟盒库存、散烟、赠烟、每日解锁、成就、任务、烟票、真实吸烟记录、戒烟日志、历史、广告、分享、麦克风、环境音与烟雾实验室。各模块导出及组件方法名见索引；这些非首版系统在当前 Cocos 工程里大多不存在，**不能用“同名功能占位”宣称规则一致**。
 
+## V1.0.8 今日戒烟页
+
+`app-config-1.json` 为 `settings-tools/pages/quit-check/quit-check` 配置原生标题“今日戒烟”。页面默认页签为“今天抽了”，另一个页签为“今天未抽”。前者真实抽烟长按三秒才记一支，松开取消；有今日未抽确认时先询问，成功记烟才取消确认。今日记录可撤销，撤销不会自动恢复未抽确认。后者的未抽确认不能与今日有效真烟记录并存；可写最多 200 字感受，可取消今日确认。原实现还有烟价估算、趋势、历史与戒烟日志入口。新工程实现了本机核心互斥记录、戒烟日志页与趋势页，旧包触觉反馈仍有差异，页面画面待用户验收。
+
+`page-frame-1.js` 的最终覆盖样式：页签高 100 rpx、选中态以 `--quit-button` 实底和 `--quit-ink` 文字显示；滚动正文 `real-panel` 顶部留白 28 rpx；标题 48 rpx、下间距 18 rpx；日期行后 30 rpx 接三列指标，比例 1.15:1:1，指标区上下 2 rpx 边线、纵向 26 rpx 内边距。长按区顶部留白最终为 32 rpx，标题最终为 34 rpx，按钮最终至少 144 rpx 高、上间距 26 rpx。`real-wipe` 在长按期间叠加相反配色的全页镜像，`clip-path` 用 3 秒线性动画从顶部揭开；取消后移除，成功后保存新主题。已确认未抽烟的冲突询问发生在开始长按前，确认后仍需重新长按。
+
+`startQuitHold` 在开始长按前检查当日有效真烟记录；有记录则弹出居中提示并不开始倒计时。`real-wipe` 的镜像内容由当前页签选择，“今天未抽”长按时同样显示该页的相反配色，并从上到下揭开。
+
+`receive-ranking` 榜单从本机成功接烟事件生成，按派烟人匿名 ID 分组；同名的不同 ID 分开，并在重复昵称后加序号。近 7 天的起点是本地今日零点往前 6 天；取消的领取不计入。先按根数降序，再按最近领取时间降序。详情列出当时的昵称快照，以及已存入散烟盒、直接抽了、后来抽掉或丢掉的状态。
+
+旧包“今天的记录”每条使用 `new Date(at).toTimeString().slice(0,8)` 显示 `HH:mm:ss`；有烟价时每支显示 `约 ¥0.00` 格式，无法估价时显示“未设烟价”。点击“撤销”后，`themed-confirm` 默认在屏幕底部弹出确认面板，文案为“撤销这支记录？”及“对应的支数和烟费估算会移除，未抽烟确认需要你重新操作。”；确认后才撤销记录并刷新统计，取消不改存储。
+
+旧包“今天的记录”每条使用 `new Date(at).toTimeString().slice(0,8)` 显示 `HH:mm:ss`；有烟价时每支显示 `约 ¥0.00` 格式，无法估价时显示“未设烟价”。点击“撤销”后，`themed-confirm` 默认在屏幕底部弹出确认面板，文案为“撤销这支记录？”及“对应的支数和烟费估算会移除，未抽烟确认需要你重新操作。”；确认后才撤销记录并刷新统计，取消不改存储。
+
+旧包 `domain/real-smoking.js` 的烟费函数对空记录列表求和为 0，所以即使未设置烟价，初始显示 `0.00 元`；只有存在无法估价的真实记录时才返回空值并显示 `—`。`settings-tools/pages/quit-check` 模板把 `real-price-editor` 条件渲染在“我的烟价”链接之后、页脚说明之前；`openRealPrice` 切换展开状态，保存时校验价格 0–10000 元及 1–100 支，成功后收起并刷新统计。`real-field wx-input` 的样式表写有 210 × 88 rpx 框及左右 18 rpx 内边距，文字颜色取主题前景色 `--real-fg`，占位符取 `--real-muted`；用户指出旧包实际画面没有明显留白，因此当前 Cocos 输入值不再额外内缩。价格 `0` 有效且估算结果为 `0.00 元`。
+
 ## 会话领域：逐方法规则
 
 ### `domain/cyber-session.js`
@@ -86,6 +102,7 @@ V1.0.8 `components/session-experience/session-experience.js` 的 `stopSession` �
 | 首页 `start-label` / `start-label-sweep`（`chunk_4.webview.js`） | 模板里并列两层同文字，扫光层 `aria-hidden=true`；底字 `#ffe0a2` 带暖色多重文字阴影，顶层 108° 透明—白金—暖金渐变，以 `start-gold-sweep 2.8s linear infinite` 将背景位置从 `140% 50%` 移到 `-40% 50%`。这是主按钮共用规则，不仅用于“补一盒”；取烟中暂停、减少动态效果时隐藏。 |
 | `pack-skins/pages/pack-select/pack-select.js.onLoad/refreshPage` | URL 带 `packId` 时进入 `mode=supply`，检查选中盒与空盒实例，显示当前盒信息、10 空位及补盒方法；不满足补盒条件则回目录模式。 |
 | `refillOrCheckIn` | 仅 `mode=supply`、未忙且可补时尝试烟票补盒；检查至少 1 张票，使用 `refill:<packInstanceId>` 交易 ID，经 `refillPackWithTicket` 成功后调用 `finishRefill`。 |
+| `services/cyber-game-service.refillPackWithTicket` | 验证目标盒已空且交易 ID 未用过；通过 `spendTicketForRefill` 扣 1 张票，归档旧盒，创建序号 +1 的新盒，使用 `commitCyberV3StateTransaction` 提交。当前 Cocos 用本地待完成记录恢复分键写入，不具备旧包的单一事务原子性。 |
 | `engagement-action` / `finishRefill` | 广告入口 `placement="pack:refill"`、`resource-id=packInstanceId`，只在组件确认完成后触发 `finishRefill`。`finishRefill` 选中补好的盒、提示“新的一盒已补满”，返回首页。仅点击广告或取消观看均不应补盒。 |
 | `services/rewarded-video.js.requestRewardedVideo` | 返回含 `result` Promise 与 `cancel` 的请求；未配置、不可用、忙碌、取消等均非奖励完成；仅关闭回调 `isEnded===true` 形成 `completed`。 |
 | `services/cyber-game-service.js` 的 `PACK_REFILL` 事务 | 核对 `pack:refill` 位置、目标盒实例、空盒和无活跃预留；旧事务不可重复，补盒归档旧盒并建序号 +1 的新盒，不是原地把十槽重置为满。 |

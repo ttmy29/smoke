@@ -41,6 +41,9 @@ export class HomeController extends Component {
   private onReadHomeSmokingStatus: (() => HomeSmokingStatus | null) | null = null;
   private onReadCheckInStatus: (() => CheckInSnapshot | null) | null = null;
   private onCheckIn: (() => void) | null = null;
+  private onQuit: (() => void) | null = null;
+  private onRanking: (() => void) | null = null;
+  private onAchievement: (() => void) | null = null;
   private checkInSnapshot: CheckInSnapshot | null = null;
   private contentRoot!: Node;
   private headerRoot!: Node;
@@ -63,6 +66,8 @@ export class HomeController extends Component {
   private bottomTabUnit = 0;
   private quickLabels: Label[] = [];
   private quickIcons: Node[] = [];
+  private achievementDot: Node | null = null;
+  private achievementDotRing: Node | null = null;
   private actionTitles: Array<{ label: Label; rpx: number; minimumPx: number; copyOffsetY: number | null }> = [];
   private actionSubtitles: Label[] = [];
   private statusLabels: Label[] = [];
@@ -114,12 +119,16 @@ export class HomeController extends Component {
   public initialize(onStart: (slotIndex: number) => void, onSupply: () => void,
     onOpenLid: (instanceId: string) => PackSnapshot | null,
     onReadHomeSmokingStatus: () => HomeSmokingStatus | null,
-    onCheckIn: () => void, onReadCheckInStatus: () => CheckInSnapshot | null): void {
+    onCheckIn: () => void, onReadCheckInStatus: () => CheckInSnapshot | null,
+    onQuit: () => void, onRanking: () => void, onAchievement: () => void): void {
     this.onStart = onStart;
     this.onSupply = onSupply;
     this.onOpenLid = onOpenLid;
     this.onReadHomeSmokingStatus = onReadHomeSmokingStatus;
     this.onCheckIn = onCheckIn;
+    this.onQuit = onQuit;
+    this.onRanking = onRanking;
+    this.onAchievement = onAchievement;
     this.onReadCheckInStatus = onReadCheckInStatus;
     this.build();
   }
@@ -579,6 +588,11 @@ export class HomeController extends Component {
   public setSmokedCount(_count: number | null): void {
     this.smokedCountLabel.string = this.checkInSnapshot?.cumulativeDays >= 3
       ? '查看全部' : '打卡3天解锁';
+  }
+
+  public setAchievementUnread(unread: boolean): void {
+    if (this.achievementDot) this.achievementDot.active = unread;
+    if (this.achievementDotRing) this.achievementDotRing.active = unread;
   }
 
   public setCheckInSnapshot(snapshot: CheckInSnapshot | null): void {
@@ -1548,9 +1562,9 @@ export class HomeController extends Component {
     const x = -690 / 2 + width * (index + 0.5);
     const action = createNode(`Quick${title}`, this.quickRoot, width, 112, x, 0);
     const button = action.addComponent(Button);
-    button.transition = index === 0 ? Button.Transition.SCALE : Button.Transition.NONE;
+    button.transition = Button.Transition.NONE;
     let pressFill: Node | null = null;
-    if (index === 0) {
+    {
       button.zoomScale = 1;
       pressFill = createNode('PressedFill', action, width, 112);
       const pressed = pressFill.addComponent(Graphics);
@@ -1558,7 +1572,12 @@ export class HomeController extends Component {
       pressed.rect(-width / 2, -56, width, 112);
       pressed.fill();
       pressFill.active = false;
-      action.on(Button.EventType.CLICK, () => this.onCheckIn?.());
+      action.on(Button.EventType.CLICK, () => {
+        if (index === 0) this.onCheckIn?.();
+        else if (index === 1) this.onQuit?.();
+        else if (index === 2) this.onRanking?.();
+        else this.onAchievement?.();
+      });
     }
     if (index > 0) createRect('Divider', action, 1, 80, '#514839', -width / 2, 0);
     const iconNode = createNode('Icon', action, 50, 50, 0, 18);
@@ -1612,6 +1631,13 @@ export class HomeController extends Component {
     label.lineHeight = 27;
     label.isBold = true;
     this.quickLabels.push(label);
+    if (index === 3) {
+      this.achievementDotRing = createRect('UnreadRing', action, 18, 18, '#1f140d', 61, 38, 9);
+      this.achievementDot = createRect('AchievementUnreadDot', action,
+        12, 12, '#e26b2e', 61, 38, 6);
+      this.achievementDot.active = false;
+      this.achievementDotRing.active = false;
+    }
     if (pressFill) {
       action.on(Node.EventType.TOUCH_START, () => {
         pressFill!.active = true;
@@ -1621,7 +1647,7 @@ export class HomeController extends Component {
         pressFill!.active = false;
         label.color = color('#d3bea0');
       };
-      action.on(Node.EventType.TOUCH_END, clearPress);
+      action.on(Node.EventType.TOUCH_END, () => this.scheduleOnce(clearPress, 0.12));
       action.on(Node.EventType.TOUCH_CANCEL, clearPress);
     }
   }

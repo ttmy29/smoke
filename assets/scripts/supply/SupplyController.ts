@@ -1,6 +1,7 @@
 import { _decorator, BlockInputEvents, Button, Component, Graphics, Label, Node, view } from 'cc';
 import { createButton, createLabel, createNode, createRect, DESIGN_HEIGHT, DESIGN_WIDTH, Palette, color } from '../common/UiFactory';
 import { PackSnapshot } from '../persistence/PackStore';
+import { TicketRefillResult } from '../persistence/TicketRefillStore';
 import { PreviewRewardedVideoGateway, RewardedVideoGateway, RewardedVideoResult } from '../services/RewardedVideo';
 
 const { ccclass } = _decorator;
@@ -11,17 +12,29 @@ export class SupplyController extends Component {
   private adOverlay!: Node;
   private notice!: Label;
   private packCodeLabel!: Label;
+  private ticketBalanceLabel!: Label;
+  private ticketHint!: Label;
+  private ticketButton!: Button;
+  private ticketButtonLabel!: Label;
   private adResolver: ((result: RewardedVideoResult) => void) | null = null;
   private adGateway!: RewardedVideoGateway;
   private onBack: (() => void) | null = null;
   private onRefill: ((instanceId: string) => boolean) | null = null;
+  private onTicketRefill: ((instanceId: string) => TicketRefillResult) | null = null;
+  private readTicketBalance: (() => number | null) | null = null;
+  private hasPendingTicketRefill: (() => boolean) | null = null;
   private packInstanceId = '';
   private busy = false;
 
   public initialize(onBack: () => void, onRefill: (instanceId: string) => boolean,
+    onTicketRefill: (instanceId: string) => TicketRefillResult,
+    readTicketBalance: () => number | null, hasPendingTicketRefill: () => boolean,
     gateway?: RewardedVideoGateway): void {
     this.onBack = onBack;
     this.onRefill = onRefill;
+    this.onTicketRefill = onTicketRefill;
+    this.readTicketBalance = readTicketBalance;
+    this.hasPendingTicketRefill = hasPendingTicketRefill;
     this.build();
     this.adGateway = gateway ?? new PreviewRewardedVideoGateway(() => this.presentPreviewAd());
   }
@@ -32,6 +45,7 @@ export class SupplyController extends Component {
     this.notice.string = '';
     this.busy = false;
     this.adOverlay.active = false;
+    this.refreshTicket();
   }
 
   public dismiss(): void {
@@ -59,7 +73,8 @@ export class SupplyController extends Component {
     this.packCodeLabel = createLabel('PackCode', this.contentRoot, 'WANG·XI · 第 1 盒',
       16, Palette.muted, 370, 34, -200, 548);
     createRect('TicketBalanceBox', this.contentRoot, 116, 60, '#111313', 275, 574, 0, '#47433d');
-    createLabel('TicketBalance', this.contentRoot, '▣ × 0', 22, Palette.gold, 110, 50, 275, 574);
+    this.ticketBalanceLabel = createLabel('TicketBalance', this.contentRoot, '▣ × 0', 22,
+      Palette.gold, 110, 50, 275, 574);
     createRect('ToolbarDivider', this.contentRoot, 750, 2, '#383b3a', 0, 516);
 
     const slotsBar = createRect('EmptySlotsBar', this.contentRoot, 560, 64, '#141617', 0, 417, 0, '#41413c');
@@ -77,13 +92,13 @@ export class SupplyController extends Component {
     createLabel('RefillDescription', panel, '补满 10 根，继续抽这一款烟。', 23,
       Palette.gold, 530, 48, 0, 212);
     createLabel('MethodsTitle', panel, '两种方式，任选一种', 22, Palette.white, 460, 42, 0, 135);
-    const ticketButton = createButton('TicketRefill', panel, '1 张烟票', 240, 86,
-      '#222425', Palette.muted, -135, 64, () => undefined, '#414440');
-    ticketButton.interactable = false;
+    this.ticketButton = createButton('TicketRefill', panel, '1 张烟票', 240, 86,
+      '#49301d', '#ffe0a2', -135, 64, () => this.requestTicket(), '#b57f4a');
+    this.ticketButtonLabel = this.ticketButton.node.getChildByName('Label')!.getComponent(Label)!;
     createLabel('Or', panel, '或', 23, Palette.white, 50, 50, 0, 64);
     createButton('AdRefill', panel, '看广告', 238, 86, '#49301d', '#ffe0a2',
       135, 64, () => { void this.requestAd(); }, '#b57f4a');
-    createLabel('TicketHint', panel, '烟票不足，看完广告也能补满，不扣烟票。', 19,
+    this.ticketHint = createLabel('TicketHint', panel, '烟票不足，看完广告也能补满，不扣烟票。', 19,
       Palette.gold, 550, 43, 0, -24);
     createLabel('ReturnHint', panel, '补好后回首页，点“来一根”开始。', 19,
       Palette.gold, 520, 42, 0, -88);
@@ -111,7 +126,7 @@ export class SupplyController extends Component {
   }
 
   private async requestAd(): Promise<void> {
-    if (this.busy || !this.packInstanceId) return;
+    if (this.busy || !this.packInstanceId || this.hasPendingTicketRefill?.()) return;
     this.busy = true;
     this.notice.string = '';
     const instanceId = this.packInstanceId;
@@ -129,6 +144,41 @@ export class SupplyController extends Component {
     } else if (result === 'unavailable' || result === 'error') {
       this.notice.string = '广告暂不可用，请稍后再试';
     }
+  }
+
+  private requestTicket(): void {
+    if (this.busy || !this.packInstanceId) return;
+    this.busy = true;
+    this.notice.string = '';
+    const result = this.onTicketRefill?.(this.packInstanceId) ?? 'failed';
+    if (result === 'completed') return;
+    this.busy = false;
+    this.refreshTicket();
+    this.notice.string = result === 'insufficient' ? '烟票不足，可看广告补一盒'
+      : result === 'invalid-pack' ? '当前烟盒已变化，请返回首页查看'
+        : '补盒未完成，请重试；不会重复扣烟票';
+  }
+
+  private refreshTicket(): void {
+    const balance = this.readTicketBalance?.() ?? null;
+    const pending = this.hasPendingTicketRefill?.() ?? false;
+    this.ticketBalanceLabel.string = `▣ × ${balance === null ? '--' : balance}`;
+    this.ticketButton.interactable = pending || (balance !== null && balance >= 1);
+    this.ticketButtonLabel.string = pending ? '继续补盒' : '1 张烟票';
+    this.ticketButtonLabel.color = color(this.ticketButton.interactable ? '#ffe0a2' : Palette.muted);
+    const graphics = this.ticketButton.node.getComponent(Graphics)!;
+    graphics.clear();
+    graphics.fillColor = color(this.ticketButton.interactable ? '#49301d' : '#222425');
+    graphics.roundRect(-120, -43, 240, 86, 43);
+    graphics.fill();
+    graphics.strokeColor = color(this.ticketButton.interactable ? '#b57f4a' : '#414440');
+    graphics.lineWidth = 2;
+    graphics.roundRect(-120, -43, 240, 86, 43);
+    graphics.stroke();
+    this.ticketHint.string = pending ? '补盒记录待完成，点左侧继续；不会重复扣票。'
+      : balance === null ? '烟票存档不可用，请检查本机存档。'
+        : balance < 1 ? '烟票不足，看完广告也能补满，不扣烟票。'
+          : '用票立即补满；看完广告补满，不扣票。';
   }
 
   private presentPreviewAd(): Promise<RewardedVideoResult> {

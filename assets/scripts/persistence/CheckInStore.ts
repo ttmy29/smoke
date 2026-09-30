@@ -9,6 +9,8 @@ interface CheckInSave {
   lastCheckinDay: string | null;
   lastExtraTicketDay: string | null;
   ticketBalance: number;
+  /** Makes an interrupted ticket refill safe to retry. */
+  lastRefillTransactionId?: string;
 }
 
 export interface CheckInSnapshot {
@@ -45,7 +47,9 @@ function validSave(value: unknown): value is CheckInSave {
     && save.streak <= save.cumulativeDays
     && (save.lastCheckinDay === null || validDay(save.lastCheckinDay))
     && (save.lastExtraTicketDay === null || validDay(save.lastExtraTicketDay))
-    && Number.isSafeInteger(save.ticketBalance) && (save.ticketBalance ?? -1) >= 0;
+    && Number.isSafeInteger(save.ticketBalance) && (save.ticketBalance ?? -1) >= 0
+    && (save.lastRefillTransactionId === undefined
+      || (typeof save.lastRefillTransactionId === 'string' && save.lastRefillTransactionId.length > 0));
 }
 
 const EMPTY_SAVE: CheckInSave = {
@@ -102,6 +106,20 @@ export class CheckInStore {
         || save.ticketBalance >= Number.MAX_SAFE_INTEGER) return false;
       return this.writeSave({ ...save, lastExtraTicketDay: today,
         ticketBalance: save.ticketBalance + 1 });
+    } catch {
+      return false;
+    }
+  }
+
+  /** Replaying the same refill transaction never spends a second ticket. */
+  public spendTicketForRefill(transactionId: string): boolean {
+    if (!transactionId) return false;
+    try {
+      const save = this.readSave();
+      if (save.lastRefillTransactionId === transactionId) return true;
+      if (save.ticketBalance < 1) return false;
+      return this.writeSave({ ...save, ticketBalance: save.ticketBalance - 1,
+        lastRefillTransactionId: transactionId });
     } catch {
       return false;
     }

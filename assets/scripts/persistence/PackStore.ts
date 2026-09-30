@@ -11,6 +11,8 @@ export interface PackSnapshot {
   /** The legacy box keeps its lid state on the box instance. */
   lidOpen: boolean;
   slots: PackSlotState[];
+  /** Identifies a ticket-funded refill when a pending transaction is replayed. */
+  lastRefillTransactionId?: string;
 }
 
 interface LegacyPackSnapshot {
@@ -23,12 +25,13 @@ const STORAGE_KEY = 'smoke.pack.wang-xi.v2';
 const LEGACY_STORAGE_KEY = 'smoke.pack.wang-xi.v1';
 const SLOT_COUNT = 10;
 
-function freshPack(sequence = 1): PackSnapshot {
+function freshPack(sequence = 1, lastRefillTransactionId?: string): PackSnapshot {
   return {
     version: 2, packId: 'wang-xi', sequence,
     instanceId: `wang-xi:${sequence}`,
     lidOpen: false,
     slots: Array(SLOT_COUNT).fill('available'),
+    lastRefillTransactionId,
   };
 }
 
@@ -42,7 +45,10 @@ function parsePackSnapshot(value: unknown): PackSnapshot | null {
   const pack = value as Partial<PackSnapshot>;
   if (!(pack.version === 2 && pack.packId === 'wang-xi'
     && Number.isSafeInteger(pack.sequence) && (pack.sequence ?? 0) >= 1
-    && pack.instanceId === `wang-xi:${pack.sequence}` && validSlots(pack.slots))) return null;
+    && pack.instanceId === `wang-xi:${pack.sequence}` && validSlots(pack.slots)
+    && (pack.lastRefillTransactionId === undefined
+      || (typeof pack.lastRefillTransactionId === 'string'
+        && pack.lastRefillTransactionId.length > 0)))) return null;
   // Early V2 previews predate the lid field. Treat those boxes as sealed once,
   // then persist the explicit state on the first open/consume write.
   return { ...pack, lidOpen: pack.lidOpen === true, slots: [...pack.slots] } as PackSnapshot;
@@ -101,6 +107,17 @@ export class PackStore {
     if (!pack || pack.instanceId !== expectedInstanceId || countAvailableSlots(pack) !== 0
       || pack.sequence >= Number.MAX_SAFE_INTEGER) return null;
     return this.writePack(freshPack(pack.sequence + 1));
+  }
+
+  /** Replaying the same ticket transaction returns its already-created box. */
+  public refillAfterTicket(expectedInstanceId: string, transactionId: string): PackSnapshot | null {
+    if (!transactionId) return null;
+    const pack = this.readPack();
+    if (!pack) return null;
+    if (pack.lastRefillTransactionId === transactionId) return pack;
+    if (pack.instanceId !== expectedInstanceId || countAvailableSlots(pack) !== 0
+      || pack.sequence >= Number.MAX_SAFE_INTEGER) return null;
+    return this.writePack(freshPack(pack.sequence + 1, transactionId));
   }
 
   private writePack(next: PackSnapshot): PackSnapshot | null {

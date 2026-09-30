@@ -172,7 +172,12 @@ export class SessionController extends Component {
     alignWidget(this.timerLabel.node, { left: 42, top: 130 });
     const extinguish = createButton('Extinguish', hud, '熄 灭', 145, 58,
       Palette.surface, Palette.gold, 275, 650, () => {
-        if (!this.entryMode) this.model.extinguish();
+        if (this.entryMode || !this.model.extinguish().accepted) return;
+        // Legacy stopSession stops the current interaction and routes immediately.
+        // Do not render an extinguished cigarette during the old completion delay.
+        this.pointerHeld = false;
+        this.audio.stop();
+        this.completeSession();
       }, Palette.goldMuted);
     alignWidget(extinguish.node, { right: 24, top: 42 });
 
@@ -281,6 +286,12 @@ export class SessionController extends Component {
     if (previousPhase === SessionPhase.LIGHTING && phase === SessionPhase.UNLIT) this.audio.stop('ignition');
     if (phase === SessionPhase.EXHALING) this.audio.play('exhale');
     if (phase === SessionPhase.FINISHED || phase === SessionPhase.EXTINGUISHED) this.audio.stop();
+  }
+
+  private completeSession(): void {
+    if (this.completionScheduled) return;
+    this.completionScheduled = true;
+    this.onComplete?.(this.model.snapshot);
   }
 
   private roundTool(parent: Node, name: string, title: string, top: number): Node {

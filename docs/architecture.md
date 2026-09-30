@@ -2,7 +2,7 @@
 
 ## 场景
 
-第一版沿用 `assets/scenes/game.scene`，在一个场景中切换 `HomePanel`、`SessionPanel`、`ResultPanel`、`SupplyPanel` 四组节点。共享 Canvas、音频控制和一次会话数据；以后页面增加再拆场景。
+第一版沿用 `assets/scenes/game.scene`，在一个场景中切换 `HomePanel`、`SessionPanel`、`ResultPanel`、`SupplyPanel`、`CheckInPanel`、`QuitPanel` 六组节点。共享 Canvas、音频控制和一次会话数据；以后页面增加再拆场景。
 
 ## 当前模块
 
@@ -10,7 +10,7 @@
 
 | 模块 | 当前目录 | 职责 |
 | --- | --- | --- |
-| `DemoFlow` | `scripts/app/` | 切换四个面板，传递会话快照；仅奖励结果为完成时调用补盒写入。 |
+| `DemoFlow` | `scripts/app/` | 切换五个面板，传递会话快照；协调烟票和广告补盒写入。 |
 | `SessionModel` | `scripts/domain/` | 与引擎无关的状态机、剩余量、灰/烟圈次数、吸入时长和交互准入。 |
 | `HomeController` | `scripts/home/` | 烟盒展示、开盒、选烟和启动会话；0/10 时将主按钮切换成补盒入口，双层文字/Canvas 纹理绘制 2.8 秒扫光。 |
 | `SessionController` | `scripts/session/` | 将长按与按钮输入转为模型事件，调度画面、音效及可见提示。 |
@@ -20,13 +20,17 @@
 | `SessionInput`（后续） | `scripts/session/input/` | 目前输入仍在 `SessionController`；将来可拆长按、松开与晃动弹灰手势。 |
 | `DemoAudio` | `scripts/audio/` | 可停止的吸气/吐气主音轨、独立弹灰叠加音轨、静音与临时素材加载；状态结束时由 `SessionController` 停止主音轨。 |
 | `ResultController` | `scripts/result/` | 显示本次结果并返回首页；当前盒空时转补盒页。 |
-| `SupplyController` | `scripts/supply/` | 空盒补盒页、烟票与换盒占位入口、广告预览弹层。 |
+| `SupplyController` | `scripts/supply/` | 空盒补盒页、本机烟票消费入口、换盒占位入口及广告预览弹层。 |
 | `RewardedVideoGateway` | `scripts/services/` | 奖励广告接口，当前 `PreviewRewardedVideoGateway` 返回占位弹层的显式模拟完成/取消结果；真实平台适配器后续替换。 |
 | `AssetCatalog` | `scripts/assets/` | 集中引用临时图片和音频，标注旧包来源。 |
 | `ProgressStore` | `scripts/persistence/` | 通过可替换的键值存储接口读写带版本号的累计抽烟根数；按本根会话 ID 防止结束回调重复计数。未来钱包、任务使用各自的存储对象和接口，不提前并入本次计数。 |
 | `PackStore` | `scripts/persistence/` | 独立保存当前王溪盒 10 个可用/空位槽、盒序号及盒盖开合状态；选中有效槽后在取烟动画前确认扣除，奖励完成且旧盒空时创建下一盒。兼容读取 V1 十槽及早期无盒盖字段的 V2 状态。库存数由槽位计算，不从累计根数倒推。 |
+| `CheckInStore` | `scripts/persistence/` | 保存每日打卡、额外烟票领取与当前烟票余额；票补盒交易 ID 重放时不重复扣票。 |
+| `QuitController` | `scripts/quit/` | 今日戒烟滑入页、真烟与未抽双页签、长按记录、确认弹层和本机历史摘要。 |
+| `QuitStore` | `scripts/persistence/` | 用同一本机键保存真实抽烟和未抽确认，保证两者互斥；记录撤销、感受、烟价与按日统计。 |
+| `TicketRefillStore` | `scripts/persistence/` | 王溪空盒用 1 张本机烟票补盒；先写待完成记录，再扣票并创建下一盒，重试或重启后继续未完成交易。 |
 
-数据流：`SessionController → SessionModel → CigaretteView / BreathEffects`；`DemoFlow` 在有效取烟前由 `PackStore` 扣当前盒槽位，会话结束快照再交给 `ProgressStore` 结算累计根数，两个结果供 `HomeController / ResultController` 展示。空盒时 `SupplyController → RewardedVideoGateway → DemoFlow → PackStore.refillAfterReward`，只有 `completed` 且旧盒实例 ID 仍匹配才新建满盒；占位广告的“模拟完成”不是实际广告奖励。`CanvasTexture` 只负责显示，不修改业务状态。烟票、真实广告、真实换盒和完整整盒结算仍未实现。浏览器存储只保障同一站点/浏览器当前设备的数据；不做完整会话历史、进行中恢复、云同步或跨数据事务。
+数据流：`SessionController → SessionModel → CigaretteView / BreathEffects`；`DemoFlow` 在有效取烟前由 `PackStore` 扣当前盒槽位，会话结束快照再交给 `ProgressStore` 结算累计根数，两个结果供 `HomeController / ResultController` 展示。空盒时可走 `SupplyController → TicketRefillStore → CheckInStore / PackStore`，只对当前空盒扣 1 张票并新建满盒；本地待完成记录使中断后可重试且不会重复扣票。广告路径为 `SupplyController → RewardedVideoGateway → DemoFlow → PackStore.refillAfterReward`，只有 `completed` 且旧盒实例 ID 仍匹配才新建满盒；占位广告的“模拟完成”不是实际广告奖励。`CanvasTexture` 只负责显示，不修改业务状态。真实广告、真实换盒和完整整盒结算仍未实现。浏览器存储只保障同一站点/浏览器当前设备的数据；不做完整会话历史、进行中恢复、云同步。票与盒的两个存储键通过待完成记录恢复，但不具备旧包单一事务写入及跨标签页并发原子性。
 
 取烟入场：`HomeController` 绘制两排共 10 个可见烟槽，并把选中烟、内衬轨及前排烟的世界包围盒转换到过渡层坐标。点击后首页非烟盒内容在 180 ms 内渐隐并隐藏，烟盒保持完整不透明；`DemoFlow` 创建未点燃的 `CigaretteView` 入场实例，`EntryMotion.sharedEntryMotion` 移植旧包曲线（Cocos 向上 Y 轴），`Mask` 模板处理前 28% 遮挡。与会话背景共用 `paintCommunityBackground` 的单张覆盖纹理置于整个 `HomePanel` 上方、抽出的烟下方，清遮挡后用 480 ms 从透明渐至不透明。视觉上剩余的旧首页与烟盒作为整体退去，盒内各层不会互相透出；完全覆盖且运动终点到达后才关闭首页。当前仍是双烟实例交接，不是旧包单 Canvas。临时 Canvas 纹理在交接时显式释放。
 
