@@ -1,6 +1,6 @@
 import { _decorator, BlockInputEvents, Button, Component, Graphics,
   HorizontalTextAlignment, Label, Mask, Node, ScrollView, tween, UITransform,
-  UIOpacity, Vec2, Vec3, view } from 'cc';
+  Vec2, Vec3, view } from 'cc';
 import { color, createLabel, createNode, createRect, DESIGN_WIDTH } from '../common/UiFactory';
 import { ACHIEVEMENT_GROUPS, AchievementItem,
   SPECIAL_ACHIEVEMENT } from './AchievementCatalog';
@@ -36,8 +36,6 @@ const ROW_GAP = 12;
 export class AchievementController extends Component {
   private source!: AchievementSource;
   private onBack!: () => void;
-  private routeShade!: Node;
-  private routeShadeOpacity!: UIOpacity;
   private nav!: Node;
   private header!: Node;
   private toolbar!: Node;
@@ -76,8 +74,6 @@ export class AchievementController extends Component {
     this.lastLocatedId = '';
     this.results.clear();
     this.readResults();
-    this.routeShade.active = true;
-    this.routeShadeOpacity.opacity = 0;
     this.node.active = true;
     this.resize();
     this.render();
@@ -90,7 +86,6 @@ export class AchievementController extends Component {
   public dismiss(): void {
     this.slide = null;
     this.flipping.clear();
-    this.routeShade.active = false;
     this.node.active = false;
   }
 
@@ -103,8 +98,6 @@ export class AchievementController extends Component {
       this.slideTime + Math.max(0, dt));
     const progress = this.slideTime / AchievementController.SLIDE_SECONDS;
     const eased = 1 - (1 - progress) ** 3;
-    // The original wx.navigateTo push darkens the uncovered home page briefly.
-    this.routeShadeOpacity.opacity = Math.round(68 * Math.sin(Math.PI * progress));
     this.node.setPosition(view.getVisibleSize().width *
       (this.slide === 'in' ? 1 - eased : eased), 0);
     if (progress >= 1) {
@@ -121,13 +114,6 @@ export class AchievementController extends Component {
   }
 
   private build(): void {
-    this.routeShade = createRect('AchievementRouteShade', this.node.parent!,
-      DESIGN_WIDTH, 2400, '#000000');
-    this.routeShade.setSiblingIndex(this.node.getSiblingIndex());
-    this.routeShade.addComponent(BlockInputEvents);
-    this.routeShadeOpacity = this.routeShade.addComponent(UIOpacity);
-    this.routeShadeOpacity.opacity = 0;
-    this.routeShade.active = false;
     this.node.addComponent(BlockInputEvents);
     createRect('AchievementBackground', this.node, DESIGN_WIDTH, 2400, BG);
     this.viewport = createNode('AchievementViewport', this.node, DESIGN_WIDTH, 1000);
@@ -175,7 +161,6 @@ export class AchievementController extends Component {
     const height = view.getVisibleSize().height;
     if (height === this.height) return;
     this.height = height;
-    this.routeShade.getComponent(UITransform)!.setContentSize(DESIGN_WIDTH, height);
     this.node.getComponent(UITransform)!.setContentSize(DESIGN_WIDTH, height);
     this.nav.setPosition(0, height / 2 - 64);
     this.header.setPosition(0, height / 2 - 228);

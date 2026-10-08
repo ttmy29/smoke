@@ -1,0 +1,232 @@
+{
+  "appid": "wx7a23ed91d1d08fcd",
+  "source": "E:/json/new/wx7a23ed91d1d08fcd_unpacked",
+  "engine": "3.8.6",
+  "launchScene": "db://assets/First/Loding-2.scene",
+  "modules": [
+    {
+      "name": "@swc/runtime/_define_property.js",
+      "bytes": 267,
+      "relativePath": "modules/@swc/runtime/_define_property.js"
+    },
+    {
+      "name": "@swc/runtime/_instanceof.js",
+      "bytes": 247,
+      "relativePath": "modules/@swc/runtime/_instanceof.js"
+    },
+    {
+      "name": "@swc/runtime/_ts_generator.js",
+      "bytes": 1717,
+      "relativePath": "modules/@swc/runtime/_ts_generator.js"
+    },
+    {
+      "name": "@swc/runtime/_ts_values.js",
+      "bytes": 857,
+      "relativePath": "modules/@swc/runtime/_ts_values.js"
+    },
+    {
+      "name": "@swc/runtime/_type_of.js",
+      "bytes": 207,
+      "relativePath": "modules/@swc/runtime/_type_of.js"
+    },
+    {
+      "name": "application.28fdc.js",
+      "bytes": 1782,
+      "relativePath": "modules/application.28fdc.js"
+    },
+    {
+      "name": "assets/internal/index.fbdac.js",
+      "bytes": 10164,
+      "relativePath": "modules/assets/internal/index.fbdac.js"
+    },
+    {
+      "name": "assets/main/index.81ce8.js",
+      "bytes": 321982,
+      "relativePath": "modules/assets/main/index.81ce8.js"
+    },
+    {
+      "name": "cocos-js/cc.9d7f6.js",
+      "bytes": 1838075,
+      "relativePath": "modules/cocos-js/cc.9d7f6.js"
+    },
+    {
+      "name": "engine-adapter.1eea2.js",
+      "bytes": 20452,
+      "relativePath": "modules/engine-adapter.1eea2.js"
+    },
+    {
+      "name": "first-screen.js",
+      "bytes": 6873,
+      "relativePath": "modules/first-screen.js"
+    },
+    {
+      "name": "game-variant.js",
+      "bytes": 526,
+      "relativePath": "modules/game-variant.js"
+    },
+    {
+      "name": "src/assets/SubGames/GridPhysics/sdk/gravityengine.mg.cocoscreator.min.05dc6.js",
+      "bytes": 331,
+      "relativePath": "modules/src/assets/SubGames/GridPhysics/sdk/gravityengine.mg.cocoscreator.min.05dc6.js"
+    },
+    {
+      "name": "src/assets/SubGames/Make24/Public/Script/gravityengine.mg.cocoscreator.min.1f68e.js",
+      "bytes": 336,
+      "relativePath": "modules/src/assets/SubGames/Make24/Public/Script/gravityengine.mg.cocoscreator.min.1f68e.js"
+    },
+    {
+      "name": "src/assets/dn_sdk/dn-sdk-minigame.min.c7bc2.js",
+      "bytes": 70905,
+      "relativePath": "modules/src/assets/dn_sdk/dn-sdk-minigame.min.c7bc2.js"
+    },
+    {
+      "name": "src/assets/yl_sdk/gravityengine.mg.cocoscreator.min.42616.js",
+      "bytes": 168129,
+      "relativePath": "modules/src/assets/yl_sdk/gravityengine.mg.cocoscreator.min.42616.js"
+    },
+    {
+      "name": "src/bundle-scripts/StressReliefChamber_datas/index.4ac00.js",
+      "bytes": 1690,
+      "relativePath": "modules/src/bundle-scripts/StressReliefChamber_datas/index.4ac00.js"
+    },
+    {
+      "name": "src/bundle-scripts/StressReliefChamber_fonts/index.10291.js",
+      "bytes": 1640,
+      "relativePath": "modules/src/bundle-scripts/StressReliefChamber_fonts/index.10291.js"
+    },
+    {
+      "name": "src/bundle-scripts/StressReliefChamber_jettons/index.af074.js",
+      "bytes": 1670,
+      "relativePath": "modules/src/bundle-scripts/StressReliefChamber_jettons/index.af074.js"
+    },
+    {
+      "name": "src/bundle-scripts/StressReliefChamber_prefabs/index.809f1.js",
+      "bytes": 1686,
+      "relativePath": "modules/src/bundle-scripts/StressReliefChamber_prefabs/index.809f1.js"
+    },
+    {
+      "name": "src/bundle-scripts/StressReliefChamber_sounds/index.ae212.js",
+      "bytes": 1556,
+      "relativePath": "modules/src/bundle-scripts/StressReliefChamber_sounds/index.ae212.js"
+    },
+    {
+      "name": "src/bundle-scripts/TurnScrew_abRes/index.42f1e.js",
+      "bytes": 1602,
+      "relativePath": "modules/src/bundle-scripts/TurnScrew_abRes/index.42f1e.js"
+    },
+    {
+      "name": "src/bundle-scripts/abLevel1/index.3fdf4.js",
+      "bytes": 1583,
+      "relativePath": "modules/src/bundle-scripts/abLevel1/index.3fdf4.js"
+    },
+    {
+      "name": "src/bundle-scripts/abLevel2/index.7566f.js",
+      "bytes": 1556,
+      "relativePath": "modules/src/bundle-scripts/abLevel2/index.7566f.js"
+    },
+    {
+      "name": "src/bundle-scripts/gc-ball-2048/index.88172.js",
+      "bytes": 46127,
+      "relativePath": "modules/src/bundle-scripts/gc-ball-2048/index.88172.js"
+    },
+    {
+      "name": "src/bundle-scripts/gc-grid-physics/index.c3cd2.js",
+      "bytes": 170697,
+      "relativePath": "modules/src/bundle-scripts/gc-grid-physics/index.c3cd2.js"
+    },
+    {
+      "name": "src/bundle-scripts/gc-king-screw/index.b216c.js",
+      "bytes": 158607,
+      "relativePath": "modules/src/bundle-scripts/gc-king-screw/index.b216c.js"
+    },
+    {
+      "name": "src/bundle-scripts/gc-make24/index.a07d1.js",
+      "bytes": 229787,
+      "relativePath": "modules/src/bundle-scripts/gc-make24/index.a07d1.js"
+    },
+    {
+      "name": "src/bundle-scripts/gc-tetris-eliminate/index.94575.js",
+      "bytes": 271499,
+      "relativePath": "modules/src/bundle-scripts/gc-tetris-eliminate/index.94575.js"
+    },
+    {
+      "name": "src/bundle-scripts/gc-watermelon/index.5ed06.js",
+      "bytes": 117613,
+      "relativePath": "modules/src/bundle-scripts/gc-watermelon/index.5ed06.js"
+    },
+    {
+      "name": "src/bundle-scripts/other/index.07017.js",
+      "bytes": 1607,
+      "relativePath": "modules/src/bundle-scripts/other/index.07017.js"
+    },
+    {
+      "name": "src/chunks/bundle.a70ad.js",
+      "bytes": 7683,
+      "relativePath": "modules/src/chunks/bundle.a70ad.js"
+    },
+    {
+      "name": "src/import-map.b1adb.js",
+      "bytes": 233,
+      "relativePath": "modules/src/import-map.b1adb.js"
+    },
+    {
+      "name": "src/polyfills.bundle.43263.js",
+      "bytes": 8657,
+      "relativePath": "modules/src/polyfills.bundle.43263.js"
+    },
+    {
+      "name": "src/system.bundle.f45da.js",
+      "bytes": 8592,
+      "relativePath": "modules/src/system.bundle.f45da.js"
+    },
+    {
+      "name": "web-adapter.b8331.js",
+      "bytes": 90008,
+      "relativePath": "modules/web-adapter.b8331.js"
+    }
+  ],
+  "systemRegistrations": [
+    "chunks:///_virtual/hidePath.ts",
+    "chunks:///_virtual/HttpProtocol.ts",
+    "chunks:///_virtual/ProgressSync.ts",
+    "chunks:///_virtual/SkinStoreUIController.ts",
+    "chunks:///_virtual/StressReliefChamber_PlayTableEntity.ts",
+    "chunks:///_virtual/TurnScrew_FixRotate.ts",
+    "chunks:///_virtual/UIBase.ts",
+    "chunks:///_virtual/StressReliefChamber_jettons",
+    "chunks:///_virtual/Elimination_VibrationManage.ts",
+    "chunks:///_virtual/AddTimePage.ts",
+    "chunks:///_virtual/FinalAnim.ts",
+    "chunks:///_virtual/Toast3.ts",
+    "chunks:///_virtual/gc-make24",
+    "chunks:///_virtual/SpeedModeController.ts",
+    "chunks:///_virtual/SpineAutoHide2.ts",
+    "chunks:///_virtual/Interlocking_ItemData2.ts",
+    "chunks:///_virtual/OverPageLevel.ts",
+    "chunks:///_virtual/Reward.ts",
+    "chunks:///_virtual/cjs-loader.mjs",
+    "chunks:///_virtual/env",
+    "chunks:///_virtual/rollupPluginModLoBabelHelpers.js"
+  ],
+  "localSubpackages": [
+    "Interlocking",
+    "resources"
+  ],
+  "remoteBundles": [
+    "abLevel1",
+    "abLevel2",
+    "gc-ball-2048",
+    "gc-grid-physics",
+    "gc-king-screw",
+    "gc-make24",
+    "gc-tetris-eliminate",
+    "gc-watermelon",
+    "other",
+    "StressReliefChamber_datas",
+    "StressReliefChamber_fonts",
+    "StressReliefChamber_jettons",
+    "StressReliefChamber_prefabs",
+    "StressReliefChamber_sounds",
+    "TurnScrew_abRes"
+  ]
+}

@@ -1,0 +1,575 @@
+{
+  "source": "E:/json/new/wx7a23ed91d1d08fcd_unpacked/subpackages/Interlocking/game.js",
+  "modules": [
+    {
+      "name": "chunks:///_virtual/AnimationController.ts",
+      "filename": "AnimationController.js",
+      "bytes": 1661,
+      "decodedReferences": 61,
+      "aliases": [
+        "o",
+        "n",
+        "h",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/AnimationProgress4.ts",
+      "filename": "AnimationProgress4.js",
+      "bytes": 1464,
+      "decodedReferences": 43,
+      "aliases": [
+        "o",
+        "s",
+        "n",
+        "L",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/BaseListItem.ts",
+      "filename": "BaseListItem.js",
+      "bytes": 633,
+      "decodedReferences": 20,
+      "aliases": [
+        "o",
+        "n",
+        "u",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/BaseListView.ts",
+      "filename": "BaseListView.js",
+      "bytes": 1221,
+      "decodedReferences": 32,
+      "aliases": [
+        "o",
+        "s",
+        "n",
+        "y",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/BaseView.ts",
+      "filename": "BaseView.js",
+      "bytes": 478,
+      "decodedReferences": 10,
+      "aliases": [
+        "o",
+        "n",
+        "u"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/BoomWaringSoundController.ts",
+      "filename": "BoomWaringSoundController.js",
+      "bytes": 1106,
+      "decodedReferences": 35,
+      "aliases": [
+        "o",
+        "s",
+        "n",
+        "g",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/CameraRenderGuard.ts",
+      "filename": "CameraRenderGuard.js",
+      "bytes": 4731,
+      "decodedReferences": 188,
+      "aliases": [
+        "o",
+        "e",
+        "n",
+        "g",
+        "a"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/CloudProgressReload.ts",
+      "filename": "CloudProgressReload.js",
+      "bytes": 3190,
+      "decodedReferences": 65,
+      "aliases": [
+        "o",
+        "i",
+        "n",
+        "y",
+        "u",
+        "e"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/DataRecorderSelectLv.ts",
+      "filename": "DataRecorderSelectLv.js",
+      "bytes": 1584,
+      "decodedReferences": 48,
+      "aliases": [
+        "o",
+        "s",
+        "n",
+        "C",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/GameCenterHost.ts",
+      "filename": "GameCenterHost.js",
+      "bytes": 2128,
+      "decodedReferences": 44,
+      "aliases": [
+        "o",
+        "e",
+        "n",
+        "d"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/GameEnum4.ts",
+      "filename": "GameEnum4.js",
+      "bytes": 845,
+      "decodedReferences": 41,
+      "aliases": [
+        "o",
+        "a"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/HomeController.ts",
+      "filename": "HomeController.js",
+      "bytes": 43420,
+      "decodedReferences": 1569,
+      "aliases": [
+        "o",
+        "r",
+        "n",
+        "tO",
+        "i",
+        "a",
+        "D",
+        "t",
+        "s",
+        "e"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Interlocking",
+      "filename": "Interlocking",
+      "bytes": 743,
+      "decodedReferences": 0,
+      "aliases": [
+        "o"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Interlocking_AudioManager.ts",
+      "filename": "Interlocking_AudioManager.js",
+      "bytes": 2252,
+      "decodedReferences": 90,
+      "aliases": [
+        "o",
+        "e",
+        "l",
+        "t",
+        "n"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Interlocking_GameData.ts",
+      "filename": "Interlocking_GameData.js",
+      "bytes": 5762,
+      "decodedReferences": 193,
+      "aliases": [
+        "o",
+        "e",
+        "n",
+        "g",
+        "t"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Interlocking_GameEvent.ts",
+      "filename": "Interlocking_GameEvent.js",
+      "bytes": 734,
+      "decodedReferences": 23,
+      "aliases": [
+        "o",
+        "e",
+        "s",
+        "n"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Interlocking_GameManager.ts",
+      "filename": "Interlocking_GameManager.js",
+      "bytes": 1309,
+      "decodedReferences": 47,
+      "aliases": [
+        "o",
+        "u",
+        "z"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Interlocking_ItemData3.ts",
+      "filename": "Interlocking_ItemData3.js",
+      "bytes": 454,
+      "decodedReferences": 14,
+      "aliases": [
+        "o",
+        "e"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Interlocking_ObjectPool3.ts",
+      "filename": "Interlocking_ObjectPool3.js",
+      "bytes": 681,
+      "decodedReferences": 22,
+      "aliases": [
+        "o",
+        "n",
+        "r",
+        "t"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Interlocking_Tool.ts",
+      "filename": "Interlocking_Tool.js",
+      "bytes": 6105,
+      "decodedReferences": 151,
+      "aliases": [
+        "o",
+        "e",
+        "n",
+        "L",
+        "t",
+        "i",
+        "s",
+        "r"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Interlocking_VibrationManage.ts",
+      "filename": "Interlocking_VibrationManage.js",
+      "bytes": 684,
+      "decodedReferences": 21,
+      "aliases": [
+        "o",
+        "r"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Interlocking_WXAManager.ts",
+      "filename": "Interlocking_WXAManager.js",
+      "bytes": 6715,
+      "decodedReferences": 235,
+      "aliases": [
+        "o",
+        "n",
+        "w"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/InterlockingGameItem.ts",
+      "filename": "InterlockingGameItem.js",
+      "bytes": 3949,
+      "decodedReferences": 174,
+      "aliases": [
+        "o",
+        "s",
+        "n",
+        "m",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/LoveWinWindow.ts",
+      "filename": "LoveWinWindow.js",
+      "bytes": 946,
+      "decodedReferences": 24,
+      "aliases": [
+        "o",
+        "s",
+        "n",
+        "w",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/MainLevelDebugPanel.ts",
+      "filename": "MainLevelDebugPanel.js",
+      "bytes": 8174,
+      "decodedReferences": 291,
+      "aliases": [
+        "o",
+        "r",
+        "n",
+        "B",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/MainProgressSync.ts",
+      "filename": "MainProgressSync.js",
+      "bytes": 6431,
+      "decodedReferences": 104,
+      "aliases": [
+        "o",
+        "i",
+        "n",
+        "p"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/MainRenderDiagnostics.ts",
+      "filename": "MainRenderDiagnostics.js",
+      "bytes": 10849,
+      "decodedReferences": 363,
+      "aliases": [
+        "o",
+        "e",
+        "n",
+        "L",
+        "u",
+        "l"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Menu3.ts",
+      "filename": "Menu3.js",
+      "bytes": 14216,
+      "decodedReferences": 465,
+      "aliases": [
+        "o",
+        "r",
+        "n",
+        "tj",
+        "i",
+        "t"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/NetManager5.ts",
+      "filename": "NetManager5.js",
+      "bytes": 2990,
+      "decodedReferences": 66,
+      "aliases": [
+        "o",
+        "i",
+        "n",
+        "B",
+        "t",
+        "e",
+        "s"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/OperationRecorder.ts",
+      "filename": "OperationRecorder.js",
+      "bytes": 1756,
+      "decodedReferences": 52,
+      "aliases": [
+        "o",
+        "n",
+        "l",
+        "t"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/ParallaxBG.ts",
+      "filename": "ParallaxBG.js",
+      "bytes": 1512,
+      "decodedReferences": 51,
+      "aliases": [
+        "o",
+        "s",
+        "n",
+        "m",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Platform4.ts",
+      "filename": "Platform4.js",
+      "bytes": 8445,
+      "decodedReferences": 212,
+      "aliases": [
+        "o",
+        "n",
+        "g",
+        "i",
+        "t",
+        "e"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/PowerManager4.ts",
+      "filename": "PowerManager4.js",
+      "bytes": 2163,
+      "decodedReferences": 71,
+      "aliases": [
+        "o",
+        "n",
+        "w",
+        "t"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/PowerNode4.ts",
+      "filename": "PowerNode4.js",
+      "bytes": 1395,
+      "decodedReferences": 45,
+      "aliases": [
+        "o",
+        "s",
+        "n",
+        "d",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/RankLayer4.ts",
+      "filename": "RankLayer4.js",
+      "bytes": 3368,
+      "decodedReferences": 95,
+      "aliases": [
+        "o",
+        "r",
+        "n",
+        "U",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/RewardLayer4.ts",
+      "filename": "RewardLayer4.js",
+      "bytes": 2949,
+      "decodedReferences": 104,
+      "aliases": [
+        "o",
+        "r",
+        "n",
+        "I",
+        "i",
+        "t"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Ring.ts",
+      "filename": "Ring.js",
+      "bytes": 9108,
+      "decodedReferences": 363,
+      "aliases": [
+        "o",
+        "n",
+        "M",
+        "i",
+        "c"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/SelectLevel.ts",
+      "filename": "SelectLevel.js",
+      "bytes": 2745,
+      "decodedReferences": 89,
+      "aliases": [
+        "o",
+        "u",
+        "n",
+        "T",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/SetLayer4.ts",
+      "filename": "SetLayer4.js",
+      "bytes": 2637,
+      "decodedReferences": 100,
+      "aliases": [
+        "o",
+        "s",
+        "n",
+        "p",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Sign.ts",
+      "filename": "Sign.js",
+      "bytes": 2641,
+      "decodedReferences": 88,
+      "aliases": [
+        "o",
+        "s",
+        "n",
+        "I",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/SkinShop2.ts",
+      "filename": "SkinShop2.js",
+      "bytes": 5612,
+      "decodedReferences": 201,
+      "aliases": [
+        "o",
+        "u",
+        "n",
+        "G",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/TipsWindows4.ts",
+      "filename": "TipsWindows4.js",
+      "bytes": 3196,
+      "decodedReferences": 117,
+      "aliases": [
+        "o",
+        "n",
+        "m",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/Toast7.ts",
+      "filename": "Toast7.js",
+      "bytes": 1161,
+      "decodedReferences": 16,
+      "aliases": [
+        "o",
+        "n",
+        "v"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/UserData.ts",
+      "filename": "UserData.js",
+      "bytes": 4770,
+      "decodedReferences": 155,
+      "aliases": [
+        "o",
+        "n",
+        "l",
+        "t",
+        "i"
+      ]
+    },
+    {
+      "name": "chunks:///_virtual/WheelLayer.ts",
+      "filename": "WheelLayer.js",
+      "bytes": 4006,
+      "decodedReferences": 127,
+      "aliases": [
+        "o",
+        "s",
+        "n",
+        "q",
+        "i"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+System["register"]("chunks:///_virtual/AnimationController.ts",["./rollupPluginModLoBabelHelpers.js","cc","./Interlocking_Tool.ts"],function(t){var n,i,e,r,s,u,a,c,l;return{setters:[function(t){n=t["inheritsLoose"]},function(t){var n=o;i=t["cclegacy"],e=t["_decorator"],r=t["find"],s=t.sp,u=t.Color,a=t["tween"],c=t.Component},function(t){l=t["Interlocking_Tool"]}],execute:function(){var f,h=o;i["_RF"]["push"]({},"b3314j1AsBLq6eG8qaxKn+2","AnimationController",void 0);var v=e["ccclass"];e["property"],t("AnimationController",v("Interlocking_AnimationController")(f=function(t){function i(){for(var n,i=o,e=arguments["length"],r=Array(e),s=0;s<e;s++)r[s]=arguments[s];return(n=t["call"]["apply"](t,[this]["concat"](r))||this)["animationNode"]=null,n.animaton=null,n["deathTween"]=null,n}n(i,t);var e=i["prototype"];return e["onLoad"]=function(){this["animationNode"]=r("anima",this["node"])},
+e["loadAnimation"]=function(t){var n=this;return this["animationNode"]=r("anima",this.node),new Promise(function(i,e){l.GetInstance()["loadSpine"]("SpineRole/"+t)["then"](function(t){var e=n["animationNode"].getComponent(s.Skeleton);e["premultipliedAlpha"]=!1,e["skeletonData"]=t,n["animaton"]=e,i(e)}).catch(function(){e()})})},
+e["init"]=function(){var t=this;this["deathTween"]&&this["deathTween"]["stop"](),this.scheduleOnce(function(){t["animaton"]&&(t.animaton.timeScale=1,t["animaton"]["color"]=new u(255,255,255,255))},.1)},
+e.walk=function(t){var n="idle";t&&(n="idle"),this["animaton"]&&this["animaton"].setAnimation(0,n,!0)},
+e["atk"]=function(t){var n="skill";t&&(n="idle"),this["animaton"]&&this.animaton["setAnimation"](0,n,!1)},
+e["stand"]=function(t){this["animaton"]&&this["animaton"]["setAnimation"](0,"idel",!0)},
+e["death"]=function(){this["stop"](),this.deathTween=a(this.animaton).to(.19,{color:new u(255,255,255,0)}).start()},
+e["stop"]=function(){this["animaton"]["timeScale"]=0},
+e["update"]=function(t){},i}(c))||f),i["_RF"]["pop"]()}}});

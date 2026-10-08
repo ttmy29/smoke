@@ -1,0 +1,3 @@
+System["register"]("chunks:///_virtual/Interlocking_VibrationManage.ts",["cc","./Interlocking_Tool.ts","./Platform4.ts"],function(t){var n,i,e;return{setters:[function(t){n=t["cclegacy"]},function(t){i=t["Interlocking_Tool"]},function(t){e=t.pf}],execute:function(){var r=o;n["_RF"]["push"]({},"4d1f8DxiW9AEoT2DWKQiKos","Interlocking_VibrationManage",void 0),t("default",function(){function t(){}return t["init"]=function(){var n=(i["getData"]("vibOpen")||"0")["toString"]();t["isOpen"]="1"==n||null==n||""==n},
+t["save"]=function(n){console["log"]("set vibration",n),t["isOpen"]=n;var e=n?"1":"0";i["saveData"]("vibOpen",e)},
+t["vivrate"]=function(n){t["isOpen"]&&e&&(1==n?e.vibrateShort({}):e["vibrateLong"]({}))},t}())["isOpen"]=!1,n["_RF"]["pop"]()}}});
