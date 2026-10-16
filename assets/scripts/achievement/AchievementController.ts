@@ -1,5 +1,5 @@
 import { _decorator, BlockInputEvents, Button, Component, Graphics,
-  HorizontalTextAlignment, Label, Mask, Node, ScrollView, tween, UITransform,
+  HorizontalTextAlignment, Label, Mask, Node, ScrollView, Tween, tween, UITransform,
   Vec2, Vec3, view } from 'cc';
 import { color, createLabel, createNode, createRect, DESIGN_WIDTH } from '../common/UiFactory';
 import { ACHIEVEMENT_GROUPS, AchievementItem,
@@ -31,6 +31,9 @@ const MUTED = '#aaa093';
 const GOLD = '#d0a16d';
 const ROW_HEIGHT = 156;
 const ROW_GAP = 12;
+const ROW_BUFFER = 2 * (ROW_HEIGHT + ROW_GAP);
+
+interface AchievementRowLayout { item: AchievementItem; groupId: string; y: number; }
 
 @ccclass('AchievementController')
 export class AchievementController extends Component {
@@ -56,6 +59,8 @@ export class AchievementController extends Component {
   private loadError = false;
   private flipped = new Set<string>();
   private flipping = new Set<string>();
+  private rowLayouts: AchievementRowLayout[] = [];
+  private rowNodes = new Map<string, Node>();
   private height = 0;
   private slide: 'in' | 'out' | null = null;
   private slideTime = 0;
@@ -75,9 +80,8 @@ export class AchievementController extends Component {
     this.results.clear();
     this.readResults();
     this.node.active = true;
-    this.resize();
-    this.render();
-    this.scroll.scrollToTop(0);
+    this.resize(false);
+    this.render(true);
     this.node.setPosition(view.getVisibleSize().width, 0);
     this.slide = 'in';
     this.slideTime = 0;
@@ -85,6 +89,10 @@ export class AchievementController extends Component {
 
   public dismiss(): void {
     this.slide = null;
+    for (const row of this.rowNodes.values()) {
+      const flipper = row.getChildByName('Flipper');
+      if (flipper) Tween.stopAllByTarget(flipper);
+    }
     this.flipping.clear();
     this.node.active = false;
   }
@@ -92,6 +100,7 @@ export class AchievementController extends Component {
   protected update(dt: number): void {
     if (!this.node.active) return;
     this.resize();
+    this.updateVisibleRows();
     this.updateScrollBar();
     if (!this.slide) return;
     this.slideTime = Math.min(AchievementController.SLIDE_SECONDS,
@@ -157,7 +166,7 @@ export class AchievementController extends Component {
     this.node.active = false;
   }
 
-  private resize(): void {
+  private resize(render = true): void {
     const height = view.getVisibleSize().height;
     if (height === this.height) return;
     this.height = height;
@@ -168,7 +177,7 @@ export class AchievementController extends Component {
     this.viewport.getComponent(UITransform)!.setContentSize(DESIGN_WIDTH,
       Math.max(220, height - 424));
     this.viewport.setPosition(0, -212);
-    this.render();
+    if (render) this.render();
     this.updateScrollBar();
   }
 
@@ -205,15 +214,21 @@ export class AchievementController extends Component {
     this.scrollThumb.setPosition(0, position);
   }
 
-  private render(): void {
+  private render(resetScroll = false): void {
     if (!this.content) return;
     // A filter or viewport rebuild discards the old flippers. Do not keep their
     // click locks for the new row nodes.
     this.flipping.clear();
+    for (const [id, row] of this.rowNodes) this.releaseRow(id, row);
+    this.rowNodes.clear();
+    this.rowLayouts = [];
     this.renderHeader();
     this.toolbar.active = !this.loadError;
     if (!this.loadError) this.renderToolbar();
-    for (const child of [...this.content.children]) child.destroy();
+    for (const child of [...this.content.children]) {
+      child.removeFromParent();
+      child.destroy();
+    }
     if (this.loadError) {
       const bodyHeight = Math.max(300, this.height - 424);
       this.content.getComponent(UITransform)!.setContentSize(DESIGN_WIDTH, bodyHeight);
@@ -229,8 +244,9 @@ export class AchievementController extends Component {
       createLabel('Text', retry, '重新读取', 26, GOLD, 200, 60);
       retry.on(Button.EventType.CLICK, () => {
         this.readResults();
-        this.render();
+        this.render(true);
       });
+      this.updateVisibleRows(resetScroll);
       return;
     }
     const availableGroups = this.results.get(SPECIAL_ACHIEVEMENT.id)?.completed
@@ -250,6 +266,7 @@ export class AchievementController extends Component {
         ? '还没有已完成的成就，先从一次体验开始。' : '这一页已全部点亮。';
       createLabel('Empty', this.content, message, 26, MUTED, 670, 100,
         0, top - 110);
+      this.updateVisibleRows(resetScroll);
       return;
     }
     for (const group of groups) {
@@ -272,11 +289,49 @@ export class AchievementController extends Component {
       }
       top -= 88;
       for (const item of group.visible) {
-        this.renderRow(item, group.id, top - ROW_HEIGHT / 2);
+        this.rowLayouts.push({ item, groupId: group.id, y: top - ROW_HEIGHT / 2 });
         top -= ROW_HEIGHT + ROW_GAP;
       }
       top -= 36;
     }
+    this.updateVisibleRows(resetScroll);
+  }
+
+  /** Keep the full scroll height, but instantiate only visible rows and a small buffer. */
+  private updateVisibleRows(resetScroll = false): void {
+    if (resetScroll) {
+      this.scroll.stopAutoScroll();
+      this.scroll.scrollToTop(0);
+    }
+    if (!this.rowLayouts.length) return;
+    const contentHeight = this.content.getComponent(UITransform)!.height;
+    const viewportHeight = this.viewport.getComponent(UITransform)!.height;
+    const maxOffset = Math.max(0, contentHeight - viewportHeight);
+    const offset = Math.max(0, Math.min(maxOffset, this.scroll.getScrollOffset().y));
+    const top = offset - ROW_BUFFER;
+    const bottom = offset + viewportHeight + ROW_BUFFER;
+    const visible = this.rowLayouts.filter((row) => {
+      const center = contentHeight / 2 - row.y;
+      return center + ROW_HEIGHT / 2 >= top && center - ROW_HEIGHT / 2 <= bottom;
+    });
+    const ids = new Set(visible.map((row) => row.item.id));
+    for (const [id, row] of this.rowNodes) {
+      if (ids.has(id)) continue;
+      this.releaseRow(id, row);
+      this.rowNodes.delete(id);
+    }
+    for (const row of visible) {
+      if (this.rowNodes.has(row.item.id)) continue;
+      this.rowNodes.set(row.item.id, this.renderRow(row.item, row.groupId, row.y));
+    }
+  }
+
+  private releaseRow(id: string, row: Node): void {
+    const flipper = row.getChildByName('Flipper');
+    if (flipper) Tween.stopAllByTarget(flipper);
+    this.flipping.delete(id);
+    row.removeFromParent();
+    row.destroy();
   }
 
   private renderHeader(): void {
@@ -302,7 +357,10 @@ export class AchievementController extends Component {
 
   private renderToolbar(): void {
     for (const child of [...this.toolbar.children]) {
-      if (child.name.startsWith('Filter') || child.name === 'Unread') child.destroy();
+      if (child.name.startsWith('Filter') || child.name === 'Unread') {
+        child.removeFromParent();
+        child.destroy();
+      }
     }
     const entries: ReadonlyArray<[Filter, string]> = [
       ['all', '全部'], ['incomplete', '未完成'], ['completed', '已完成'],
@@ -319,8 +377,7 @@ export class AchievementController extends Component {
         if (this.filter === filter) return;
         this.filter = filter;
         this.flipped.clear();
-        this.render();
-        this.scroll.scrollToTop(0);
+        this.render(true);
       });
     });
     if ([...this.results.values()].some((item) => item.unread)) {
@@ -331,7 +388,7 @@ export class AchievementController extends Component {
     }
   }
 
-  private renderRow(item: AchievementItem, groupId: string, y: number): void {
+  private renderRow(item: AchievementItem, groupId: string, y: number): Node {
     const result = this.results.get(item.id);
     const complete = !!result?.completed;
     const flipped = complete && this.flipped.has(item.id);
@@ -401,6 +458,7 @@ export class AchievementController extends Component {
           }).start();
       });
     }
+    return row;
   }
 
   private refreshUnreadDecorations(groupId: string): void {
@@ -433,7 +491,8 @@ export class AchievementController extends Component {
   }
 
   private locateUnread(): void {
-    const unreadItems = [...ACHIEVEMENT_GROUPS.flatMap((group) => group.items),
+    const unreadItems = [...ACHIEVEMENT_GROUPS.reduce<AchievementItem[]>((items, group) =>
+      items.concat(group.items), []),
       SPECIAL_ACHIEVEMENT]
       .filter((item) => this.results.get(item.id)?.unread);
     const last = unreadItems.findIndex((item) => item.id === this.lastLocatedId);
@@ -441,12 +500,11 @@ export class AchievementController extends Component {
     if (!unread) return;
     if (!this.matches(unread)) {
       this.filter = 'completed';
-      this.render();
+      this.render(true);
     }
     this.lastLocatedId = unread.id;
-    const row = [...this.content.children].reverse()
-      .find((child) => child.name === `AchievementRow-${unread.id}`);
+    const row = this.rowLayouts.find((entry) => entry.item.id === unread.id);
     if (row) this.scroll.scrollToOffset(new Vec2(0,
-      Math.max(0, this.content.getComponent(UITransform)!.height / 2 - row.position.y - 80)), 0.3);
+      Math.max(0, this.content.getComponent(UITransform)!.height / 2 - row.y - 80)), 0.3);
   }
 }

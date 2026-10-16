@@ -1,10 +1,12 @@
-import { _decorator, Component, Graphics, HorizontalTextAlignment, Label, Node, SafeArea, UIOpacity, view } from 'cc';
+import { _decorator, Component, EventTouch, EventMouse, Graphics, HorizontalTextAlignment, Label, Node, SafeArea, screen, UIOpacity, view } from 'cc';
 import { DemoAudio } from '../audio/DemoAudio';
 import { alignWidget, color, createButton, createLabel, createNode, DESIGN_HEIGHT, DESIGN_WIDTH, formatDuration, Palette } from '../common/UiFactory';
 import { SessionModel, SessionPhase, SessionSnapshot } from '../domain/SessionModel';
 import { BreathEffects } from './effects/BreathEffects';
 import { CanvasTexture } from './effects/CanvasTexture';
 import { CigaretteView } from './view/CigaretteView';
+import { colorHex, DEFAULT_SMOKE_SCHEME, LabRuntime } from '../lab/SmokeLabModel';
+import { directionalMotion } from '../lab/SmokeMotion';
 
 const { ccclass } = _decorator;
 
@@ -69,6 +71,36 @@ export class SessionController extends Component {
   private entryMode = false;
   private entrySceneNodes: Node[] = [];
   private hudOpacity!: UIOpacity;
+  private readLab: (() => LabRuntime | null) | null = null;
+  private onLab: (() => void) | null = null;
+  private lab: LabRuntime = { scheme: { ...DEFAULT_SMOKE_SCHEME }, days: 0, handSmoke: false,
+    directionalRing: false, unlimitedRings: false, formation: null };
+  private labRefreshAt = 0;
+  private pointerLocation: { x: number; y: number } | null = null;
+  private ringStart: { x: number; y: number; at: number } | null = null;
+  private ringClickBlockedUntil = 0;
+  private formationButton!: Node;
+
+  public configureLab(read: () => LabRuntime | null, onOpen: () => void): void {
+    this.readLab = read; this.onLab = onOpen; this.refreshLab();
+  }
+
+  public refreshLab(): void {
+    const runtime = this.readLab?.();
+    this.lab = runtime ?? { scheme: { ...DEFAULT_SMOKE_SCHEME }, days: 0, handSmoke: false,
+      directionalRing: false, unlimitedRings: false, formation: null };
+    this.model.setUnlimitedRings(this.lab.unlimitedRings);
+    this.cigaretteView?.setIdleSmokeColor(colorHex(this.lab.scheme.idleSmokeColor));
+    this.breathEffects?.setScheme(this.lab.scheme);
+    this.labRefreshAt = Date.now() + 1000;
+    if (this.formationButton) this.formationButton.active = !!this.lab.formation;
+  }
+
+  public pauseForLab(): void { this.handleRelease(); this.audio.stop(); }
+  public resumeFromLab(): void {
+    this.refreshLab();
+    if (this.model.snapshot.phase === SessionPhase.EXHALING) this.audio.play('exhale');
+  }
 
   public initialize(audio: DemoAudio, onComplete: (snapshot: Readonly<SessionSnapshot>) => void): void {
     this.audio = audio;
@@ -80,8 +112,11 @@ export class SessionController extends Component {
   public resetSession(): void {
     this.unscheduleAllCallbacks();
     this.audio?.stop();
+    if (this.muteLabel && this.audio) this.muteLabel.string = this.audio.isMuted ? '音效：关' : '音效：开';
     this.model = new SessionModel();
+    this.refreshLab();
     this.pointerHeld = false;
+    this.pointerLocation = null; this.ringStart = null; this.ringClickBlockedUntil = 0;
     this.completionScheduled = false;
     this.feedbackText = '';
     this.feedbackUntil = 0;
@@ -119,6 +154,7 @@ export class SessionController extends Component {
 
   protected update(deltaTime: number): void {
     if (!this.node.activeInHierarchy || this.entryMode) return;
+    if (Date.now() >= this.labRefreshAt) this.refreshLab();
     this.drawBackground();
     const compact = view.getVisibleSize().height < 1280;
     for (const node of this.compactOnlyHidden) node.active = !compact;
@@ -154,9 +190,11 @@ export class SessionController extends Component {
     interaction.on(Node.EventType.TOUCH_START, this.handlePress, this);
     interaction.on(Node.EventType.TOUCH_END, this.handleRelease, this);
     interaction.on(Node.EventType.TOUCH_CANCEL, this.handleRelease, this);
+    interaction.on(Node.EventType.TOUCH_MOVE, this.handleSmokeMove, this);
     interaction.on(Node.EventType.MOUSE_DOWN, this.handlePress, this);
     interaction.on(Node.EventType.MOUSE_UP, this.handleRelease, this);
     interaction.on(Node.EventType.MOUSE_LEAVE, this.handleRelease, this);
+    interaction.on(Node.EventType.MOUSE_MOVE, this.handleSmokeMove, this);
 
     const hud = createNode('SessionSafeHud', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.hudOpacity = hud.addComponent(UIOpacity);
@@ -188,7 +226,13 @@ export class SessionController extends Component {
     this.makeCircular(muteButton.node);
     this.muteLabel = muteButton.node.getChildByName('Label')!.getComponent(Label)!;
     this.roundTool(hud, 'Environment', '环境', 448);
-    this.roundTool(hud, 'Lab', '实验室', 582);
+    const labButton = createButton('Lab', hud, '实验室', 116, 116, Palette.surface, Palette.gold, 280, 0, () => {
+      if (this.entryMode) return;
+      this.refreshLab();
+      if (this.lab.days < 2) { this.showHint('打卡2天解锁'); return; }
+      this.onLab?.();
+    }, Palette.goldMuted);
+    alignWidget(labButton.node, { right: 28, top: 582 }); this.makeCircular(labButton.node);
     this.compactOnlyHidden.push(this.roundTool(hud, 'Send', '派烟', 716));
     this.compactOnlyHidden.push(this.roundTool(hud, 'Unlock', '打卡两天', 850));
     const toolNote = createLabel('ToolNote', hud, '灰色入口暂未开放', 15, Palette.muted, 150, 28, 278, -309);
@@ -199,8 +243,34 @@ export class SessionController extends Component {
       Palette.surface, Palette.gold, -255, -690, () => this.flickAsh(), Palette.goldMuted);
     alignWidget(ashButton.node, { left: 22, bottom: 54 });
     const ringButton = createButton('SmokeRingButton', hud, '吐烟圈', 220, 220,
-      Palette.surface, Palette.gold, 255, -690, () => this.emitSmokeRing(), Palette.goldMuted);
+      Palette.surface, Palette.gold, 255, -690, () => this.scheduleOnce(() => this.emitSmokeRing(), 0), Palette.goldMuted);
     alignWidget(ringButton.node, { right: 22, bottom: 54 });
+    ringButton.node.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+      const p = event.getUILocation(); this.ringStart = { x: p.x, y: p.y, at: Date.now() };
+    });
+    ringButton.node.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+      const start = this.ringStart; this.ringStart = null;
+      if (!start || !this.lab.directionalRing || this.entryMode) return;
+      const p = event.getUILocation();
+      const unit = view.getVisibleSize().width / Math.max(1, screen.windowSize.width / (screen.devicePixelRatio || 1));
+      const motion = directionalMotion((p.x - start.x) / unit, (p.y - start.y) / unit, Date.now() - start.at);
+      if (!motion) return;
+      this.ringClickBlockedUntil = Date.now() + 250;
+      this.emitSmokeRing(motion);
+    });
+    ringButton.node.on(Node.EventType.TOUCH_CANCEL, (event: EventTouch) => {
+      // Sliding outside the button must still emit a directional ring once on release.
+      const start = this.ringStart; this.ringStart = null;
+      if (!start || !this.lab.directionalRing || this.entryMode) return;
+      const p = event.getUILocation();
+      const unit = view.getVisibleSize().width / Math.max(1, screen.windowSize.width / (screen.devicePixelRatio || 1));
+      const motion = directionalMotion((p.x - start.x) / unit, (p.y - start.y) / unit, Date.now() - start.at);
+      if (motion) { this.ringClickBlockedUntil = Date.now() + 250; this.emitSmokeRing(motion); }
+    });
+    this.formationButton = createButton('TriggerFormation', hud, '触发编队', 220, 68,
+      Palette.surface, Palette.gold, 0, 0, () => this.emitFormation(), Palette.goldMuted).node;
+    alignWidget(this.formationButton, { right: 22, bottom: 296 });
+    this.formationButton.active = false;
     this.ringNoteLabel = createLabel('SmokeRingNote', hud, '吐气时可喷 · 剩余 3 次',
       15, Palette.muted, 220, 35, 250, -825);
     alignWidget(this.ringNoteLabel.node, { right: 22, bottom: 10 });
@@ -221,9 +291,11 @@ export class SessionController extends Component {
     this.background.redraw((ctx) => paintCommunityBackground(ctx, DESIGN_WIDTH, height));
   }
 
-  private handlePress(): void {
+  private handlePress(event?: EventTouch | EventMouse): void {
     if (this.entryMode || this.pointerHeld) return;
     this.pointerHeld = true;
+    const point = event?.getUILocation();
+    this.pointerLocation = point ? { x: point.x, y: point.y } : null;
     const phase = this.model.snapshot.phase;
     if (phase === SessionPhase.UNLIT) {
       if (this.model.beginLighting().accepted) this.audio.play('ignition');
@@ -235,10 +307,18 @@ export class SessionController extends Component {
   private handleRelease(): void {
     if (!this.pointerHeld) return;
     this.pointerHeld = false;
+    this.pointerLocation = null;
     const previousPhase = this.model.snapshot.phase;
     if (previousPhase === SessionPhase.LIGHTING) this.model.cancelLighting();
     if (previousPhase === SessionPhase.INHALING) this.model.releaseInhale();
     this.onPhaseChanged(previousPhase);
+  }
+
+  private handleSmokeMove(event: EventTouch | EventMouse): void {
+    if (!this.pointerHeld || !this.lab.handSmoke || this.entryMode || this.model.snapshot.phase !== SessionPhase.EXHALING) return;
+    const point = event.getUILocation(), previous = this.pointerLocation;
+    this.pointerLocation = { x: point.x, y: point.y };
+    if (previous) this.breathEffects.displaceSmoke(point.x - previous.x, point.y - previous.y);
   }
 
   private flickAsh(): void {
@@ -255,15 +335,26 @@ export class SessionController extends Component {
     }
   }
 
-  private emitSmokeRing(): void {
-    if (this.entryMode) return;
+  private emitSmokeRing(motion?: { vx: number; vy: number }): void {
+    if (this.entryMode || (!motion && Date.now() < this.ringClickBlockedUntil)) return;
+    this.refreshLab();
     const result = this.model.emitSmokeRing();
     if (!result.accepted) {
       if (result.reason) this.showHint(result.reason);
       return;
     }
-    this.breathEffects.emitRing(Math.min(1, this.model.snapshot.lastInhaleSeconds / 3));
+    this.breathEffects.emitRing(Math.min(1, this.model.snapshot.lastInhaleSeconds / 3), motion);
     this.showHint('烟圈喷出去了', 0.8);
+  }
+
+  private emitFormation(): void {
+    if (this.entryMode) return;
+    this.refreshLab();
+    if (!this.lab.formation) { this.showHint('请先在实验室开启今日编队'); return; }
+    const result = this.model.emitSmokeRing();
+    if (!result.accepted) { if (result.reason) this.showHint(result.reason); return; }
+    this.breathEffects.emitFormation(Math.min(1, this.model.snapshot.lastInhaleSeconds / 3), this.lab.formation);
+    this.showHint('编队已触发', 0.8);
   }
 
   private showHint(message: string, seconds = 1.8): void {
@@ -317,7 +408,8 @@ export class SessionController extends Component {
     this.timerLabel.string = formatDuration(snapshot.elapsedSeconds);
     this.promptLabel.string = snapshot.elapsedSeconds < this.feedbackUntil
       ? this.feedbackText : this.promptFor(snapshot);
-    this.ringNoteLabel.string = `吐气时可喷 · 剩余 ${Math.max(0, 3 - snapshot.smokeRingCount)} 次`;
+    this.ringNoteLabel.string = this.lab.unlimitedRings ? '吐气时可喷 · 今日 ∞ 次'
+      : `吐气时可喷 · 剩余 ${Math.max(0, 3 - snapshot.smokeRingCount)} 次`;
   }
 
   private promptFor(snapshot: Readonly<SessionSnapshot>): string {

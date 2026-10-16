@@ -3,6 +3,7 @@ import { createButton, createLabel, createNode, createRect, DESIGN_HEIGHT, DESIG
 import { PackSnapshot } from '../persistence/PackStore';
 import { TicketRefillResult } from '../persistence/TicketRefillStore';
 import { PreviewRewardedVideoGateway, RewardedVideoGateway, RewardedVideoResult } from '../services/RewardedVideo';
+import { ENABLE_AD_PREVIEW } from '../config/InitialSettings';
 
 const { ccclass } = _decorator;
 
@@ -36,7 +37,7 @@ export class SupplyController extends Component {
     this.readTicketBalance = readTicketBalance;
     this.hasPendingTicketRefill = hasPendingTicketRefill;
     this.build();
-    this.adGateway = gateway ?? new PreviewRewardedVideoGateway(() => this.presentPreviewAd());
+    this.adGateway = gateway ?? new PreviewRewardedVideoGateway(() => this.presentPreviewAd(), ENABLE_AD_PREVIEW);
   }
 
   public present(pack: PackSnapshot): void {

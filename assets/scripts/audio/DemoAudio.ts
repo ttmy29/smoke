@@ -13,6 +13,16 @@ export class DemoAudio extends Component {
   private activePrimary: DemoSound | null = null;
   private pendingPrimary: DemoSound | null = null;
   private muted = false;
+  private masterVolume = 1;
+
+  /** Startup defaults; the settings page may toggle mute during this run. */
+  public initializeDefaults(soundEnabled: boolean, volume: number): boolean {
+    if (typeof soundEnabled !== 'boolean' || !Number.isFinite(volume) || volume < 0 || volume > 1) return false;
+    this.muted = !soundEnabled;
+    this.masterVolume = volume;
+    if (this.muted) this.stop();
+    return true;
+  }
 
   protected onLoad(): void {
     const primaryNode = new Node('PrimarySound');
@@ -36,8 +46,8 @@ export class DemoAudio extends Component {
       if (!clip) return;
       this.accentSource.stop();
       this.accentSource.clip = clip;
-      this.accentSource.volume = this.primarySource.playing
-        && (this.activePrimary === 'inhale' || this.activePrimary === 'exhale') ? 0.28 : 0.58;
+      this.accentSource.volume = (this.primarySource.playing
+        && (this.activePrimary === 'inhale' || this.activePrimary === 'exhale') ? 0.28 : 0.58) * this.masterVolume;
       this.accentSource.currentTime = 0;
       this.accentSource.play();
       return;
@@ -82,7 +92,7 @@ export class DemoAudio extends Component {
     if (!clip) return;
     this.pendingPrimary = null;
     this.primarySource.clip = clip;
-    this.primarySource.volume = sound === 'inhale' || sound === 'exhale' ? 0.9 : 1;
+    this.primarySource.volume = (sound === 'inhale' || sound === 'exhale' ? 0.9 : 1) * this.masterVolume;
     this.primarySource.currentTime = 0;
     this.primarySource.play();
   }

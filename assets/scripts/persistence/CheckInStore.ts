@@ -2,6 +2,14 @@ import type { KeyValueStorage } from './ProgressStore';
 
 export const CHECK_IN_STORAGE_KEY = 'smoke.check-in.v1';
 
+export interface TicketLedgerEntry {
+  id: string;
+  at: number;
+  day: string;
+  delta: number;
+  reason: 'daily-checkin' | 'checkin-ad-bonus' | 'pack-refill';
+}
+
 interface CheckInSave {
   version: 1;
   cumulativeDays: number;
@@ -11,6 +19,9 @@ interface CheckInSave {
   ticketBalance: number;
   /** Makes an interrupted ticket refill safe to retry. */
   lastRefillTransactionId?: string;
+  ledger?: TicketLedgerEntry[];
+  historyIncomplete?: boolean;
+  ledgerArchived?: boolean;
 }
 
 export interface CheckInSnapshot {
@@ -22,6 +33,13 @@ export interface CheckInSnapshot {
 }
 
 export type CheckInResult = 'checked' | 'already-checked' | 'failed';
+
+export interface CheckInPreviewSettings {
+  cumulativeDays: number;
+  streak: number;
+  ticketBalance: number;
+  checkedToday: boolean;
+}
 
 function localDay(now: number): string {
   const date = new Date(now);
@@ -49,7 +67,15 @@ function validSave(value: unknown): value is CheckInSave {
     && (save.lastExtraTicketDay === null || validDay(save.lastExtraTicketDay))
     && Number.isSafeInteger(save.ticketBalance) && (save.ticketBalance ?? -1) >= 0
     && (save.lastRefillTransactionId === undefined
-      || (typeof save.lastRefillTransactionId === 'string' && save.lastRefillTransactionId.length > 0));
+      || (typeof save.lastRefillTransactionId === 'string' && save.lastRefillTransactionId.length > 0))
+    && (save.ledger === undefined || (Array.isArray(save.ledger) && save.ledger.length <= 200
+      && save.ledger.every((entry) => entry && typeof entry.id === 'string' && entry.id.length > 0
+        && Number.isFinite(entry.at) && entry.at >= 0 && validDay(entry.day)
+        && ['daily-checkin', 'checkin-ad-bonus', 'pack-refill'].indexOf(entry.reason) >= 0
+        && entry.delta === (entry.reason === 'pack-refill' ? -1 : 1))
+      && new Set(save.ledger.map((entry) => entry.id)).size === save.ledger.length))
+    && (save.historyIncomplete === undefined || typeof save.historyIncomplete === 'boolean')
+    && (save.ledgerArchived === undefined || typeof save.ledgerArchived === 'boolean');
 }
 
 const EMPTY_SAVE: CheckInSave = {
@@ -59,6 +85,29 @@ const EMPTY_SAVE: CheckInSave = {
 
 export class CheckInStore {
   constructor(private readonly storage: KeyValueStorage | null) {}
+
+  /** Development preview only. Never overwrite an existing save if clearing storage failed. */
+  public initializePreview(settings: CheckInPreviewSettings, now = Date.now()): boolean {
+    const { cumulativeDays, streak, ticketBalance, checkedToday } = settings;
+    if (!this.storage || !Number.isFinite(now) || now < 0
+      || ![cumulativeDays, streak, ticketBalance].every((value) => Number.isSafeInteger(value) && value >= 0)
+      || streak > cumulativeDays || typeof checkedToday !== 'boolean'
+      || (checkedToday && streak < 1)) return false;
+    try {
+      if (this.storage.getItem(CHECK_IN_STORAGE_KEY) !== null) return false;
+      return this.writeSave({
+        ...EMPTY_SAVE,
+        cumulativeDays,
+        streak,
+        lastCheckinDay: checkedToday ? localDay(now) : streak > 0 ? previousDay(localDay(now)) : null,
+        ticketBalance,
+        ledger: [],
+        historyIncomplete: cumulativeDays > 0 || ticketBalance > 0,
+      });
+    } catch {
+      return false;
+    }
+  }
 
   public readSnapshot(now = Date.now()): CheckInSnapshot | null {
     try {
@@ -91,7 +140,8 @@ export class CheckInStore {
         lastCheckinDay: today,
         ticketBalance: save.ticketBalance + 1,
       };
-      return this.writeSave(next) ? 'checked' : 'failed';
+      return this.writeSave(this.withLedger(next, save, { id: `checkin:${today}`,
+        at: now, day: today, delta: 1, reason: 'daily-checkin' })) ? 'checked' : 'failed';
     } catch {
       return 'failed';
     }
@@ -104,8 +154,9 @@ export class CheckInStore {
       const today = localDay(now);
       if (save.lastCheckinDay !== today || save.lastExtraTicketDay === today
         || save.ticketBalance >= Number.MAX_SAFE_INTEGER) return false;
-      return this.writeSave({ ...save, lastExtraTicketDay: today,
-        ticketBalance: save.ticketBalance + 1 });
+      return this.writeSave(this.withLedger({ ...save, lastExtraTicketDay: today,
+        ticketBalance: save.ticketBalance + 1 }, save, { id: `extra:${today}`,
+        at: now, day: today, delta: 1, reason: 'checkin-ad-bonus' }));
     } catch {
       return false;
     }
@@ -118,11 +169,30 @@ export class CheckInStore {
       const save = this.readSave();
       if (save.lastRefillTransactionId === transactionId) return true;
       if (save.ticketBalance < 1) return false;
-      return this.writeSave({ ...save, ticketBalance: save.ticketBalance - 1,
-        lastRefillTransactionId: transactionId });
+      const now = Date.now();
+      return this.writeSave(this.withLedger({ ...save, ticketBalance: save.ticketBalance - 1,
+        lastRefillTransactionId: transactionId }, save, { id: transactionId,
+        at: now, day: localDay(now), delta: -1, reason: 'pack-refill' }));
     } catch {
       return false;
     }
+  }
+
+  public readHistory(): { ledger: TicketLedgerEntry[]; incomplete: boolean; archived: boolean } | null {
+    try {
+      const save = this.readSave();
+      return { ledger: [...(save.ledger ?? [])].sort((a, b) => b.at - a.at),
+        incomplete: save.historyIncomplete ?? (save.cumulativeDays > 0 || save.ticketBalance > 0),
+        archived: save.ledgerArchived ?? false };
+    } catch { return null; }
+  }
+
+  private withLedger(next: CheckInSave, previous: CheckInSave, entry: TicketLedgerEntry): CheckInSave {
+    const ledger = previous.ledger ?? [];
+    return { ...next, ledger: [...ledger, entry].slice(-200),
+      historyIncomplete: previous.historyIncomplete
+        ?? (previous.cumulativeDays > 0 || previous.ticketBalance > 0),
+      ledgerArchived: previous.ledgerArchived === true || ledger.length >= 200 };
   }
 
   private readSave(): CheckInSave {

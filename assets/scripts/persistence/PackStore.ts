@@ -2,6 +2,12 @@ import type { KeyValueStorage } from './ProgressStore';
 
 export type PackSlotState = 'available' | 'empty';
 
+export interface PackPreviewSettings {
+  packId: string;
+  remaining: number;
+  lidOpen: boolean;
+}
+
 export interface PackSnapshot {
   version: 2;
   packId: 'wang-xi';
@@ -63,6 +69,23 @@ function isLegacyPackSnapshot(value: unknown): value is LegacyPackSnapshot {
 /** Local box inventory. An old V1 box is read without erasing its ten chosen holes. */
 export class PackStore {
   constructor(private readonly storage: KeyValueStorage | null) {}
+
+  /** Development initialization only; preserve both current and legacy saves if present. */
+  public initializePreview(settings: PackPreviewSettings): boolean {
+    const { packId, remaining, lidOpen } = settings;
+    if (!this.storage || packId !== 'wang-xi' || !Number.isSafeInteger(remaining)
+      || remaining < 0 || remaining > SLOT_COUNT || typeof lidOpen !== 'boolean') return false;
+    try {
+      if (this.storage.getItem(STORAGE_KEY) !== null
+        || this.storage.getItem(LEGACY_STORAGE_KEY) !== null) return false;
+      const pack = freshPack();
+      pack.lidOpen = lidOpen;
+      pack.slots = pack.slots.map((_, index) => index < remaining ? 'available' : 'empty');
+      return this.writePack(pack) !== null;
+    } catch {
+      return false;
+    }
+  }
 
   /** Null means unavailable or corrupt, never an implicitly refilled pack. */
   public readPack(): PackSnapshot | null {

@@ -48,6 +48,9 @@ export class CigaretteView {
   private ignitionVisible = false;
   private bodyKey = '';
   private entryProgress = 1;
+  private idleSmokeHex = '#d9dad6';
+
+  public setIdleSmokeColor(hex: string): void { this.idleSmokeHex = hex; }
 
   constructor(parent: Node) {
     // Legacy draw order: tip smoke and ignition behind the cigarette/ash.
@@ -779,10 +782,10 @@ export class CigaretteView {
         const fade = Math.min(1, (6.8 - newest.age) / 1.2);
         const gradient = ctx.createLinearGradient(0, newest.y + newest.age * 92 + 12,
           0, oldest.y + oldest.age * 92 - 16);
-        gradient.addColorStop(0, '#d9dad600');
-        gradient.addColorStop(0.12, '#d9dad6b3');
-        gradient.addColorStop(0.52, '#d9dad685');
-        gradient.addColorStop(1, '#d9dad600');
+        gradient.addColorStop(0, `${this.idleSmokeHex}00`);
+        gradient.addColorStop(0.12, `${this.idleSmokeHex}b3`);
+        gradient.addColorStop(0.52, `${this.idleSmokeHex}85`);
+        gradient.addColorStop(1, `${this.idleSmokeHex}00`);
         ctx.strokeStyle = gradient;
         ctx.beginPath();
         this.traceSmokeTrail(ctx, trail, false);

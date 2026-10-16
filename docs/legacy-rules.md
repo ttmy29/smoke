@@ -6,6 +6,30 @@
 
 V1.0.7 历史证据文件 SHA-256：`appservice.app.js = 57B60D1D95D5B5F4F608A33B473D6E8BF0F9A02E37C93D4C1E5CD4CEF644B38B`；`chunk_3.appservice.js = B75FED94A94A265CBC249CE1A4C6077FEE9E57F84D3DE11A8AD7F6237305567E`；`chunk_4.appservice.js = 257E6FA606AFB97BF8269E8964E201DBC6C42DE176DE98C0A49E7AACDA675D72`。旧包另有 `app-service.js` 聚合副本；旧索引以 `appservice.app.js + chunk_0…9.appservice.js` 去重。不得用这些哈希证明 V1.0.8 对应文件内容相同。
 
+## V1.0.8 赛博记录页（2026-10-16）
+
+`chunk_6.appservice-1.js` 的 `openRecords` 先检查忙碌与累计打卡 3 天，未解锁提示“打卡3天解锁”，导航 `/record-pages/pages/stats/stats`。`app-config-1.json` 导航标题“记录”；`record-pages/chunk_5.appservice.js`／`chunk_5.webview.js` 为具体页面。
+
+- 标题“赛博记录”，烟票余额与线上／线下说明；四格为今天、近7天、全部、完整抽完盒数，三个汇总为累计口数、抽烟时间、常用烟盒。近 7 天包含本地今天及前 6 天。
+- 默认打卡，页签顺序打卡／抽烟／戒烟／任务／烟票；分类到顶吸附。打卡列表取钱包中的真实每日打卡流水；烟票列本机最近收支。抽烟展示最近 30 根，详情只读；戒烟按日期合并真烟和明确未抽确认，每次加载 20 日期。
+- `domain/effect-tasks.js` 共 9 项；目标依次为有效弹灰30、吐圈30、吐圈100、弹灰100、累计打卡5、有效拨烟50且3日期、指向50且左右各20、吐圈300、累计打卡7。完成需要业务校验和永久奖励服务，不能仅改按钮状态。
+- 烟费单价留空取消估算，有效范围 0.01～10000 元且最多两位小数；`record-pages/domain/reality-baseline.js` 按有限且大于 0、不晚于当前时间的已结束会话时间戳计根数，乘每盒价格再除20并按分四舍五入，不代表真实节省。初始累计数字不能替代结束记录证据。
+- 烟费模板的两列统计位于价格状态条件外，因此未设价／编辑中／已设价均显示；顺序为标题与铅笔、两列统计、状态区域。上、下横线及中间竖线颜色 #39362e；铅笔点击区44px。输入含 ¥、数字框及元／盒，上限8字符，confirm和保存均调用保存；保存按钮 #d4a160，取消 #211b14。
+- 公共 `styles/quit-theme.wxss` 中趋势入口透明，左“查看吸烟与烟费趋势”、右“折线图”，最小高100rpx、底部细线。日期行 `.quit-row` 上下内边距24rpx、最小高116rpx，实际由日期／时间／感受或烟价链接撑高；状态为底色 #181a16、描边 #454a3b 的胶囊。缺价格显示完整下划线文字链接，不另加设置按钮；查看更多日期透明。`services/quit-journal` 的“最近记录”属于真烟日期行的时间说明，并非独立栏目。
+- 最终样式：底色 #0d0f11，左右30rpx、顶部44rpx，标题58rpx；四列统计、金色数值、圆角24rpx汇总板，分类点击高至少48px。详情遮罩rgba(4,5,6,.86)，正文可滚动。Cocos 当前实现范围与剩余差异见 [记录页](records-page.md)，未进行画面验证。
+
+## V1.0.8 打卡解锁弹层（2026-10-16）
+
+当前开发预览补充：`InitialSettings.ts` 的初始累计／连续／烟票／今日状态已独立配置，仅重置时应用；它是 Cocos 开发种子入口，不是从旧包推导出的生产初始状态。累计与连续的业务区别、逐日去重和跨门槛弹层规则继续按下文执行。详细配置及预留项见 [初始设置](initial-settings.md)。
+
+证据：`appservice.app-1.js` 中 `domain/check-in-access.js`；`settings-tools/chunk_3.appservice-1.js` 的打卡成功逻辑；根目录 `chunk_3.appservice-1.js`、`chunk_3.webview-1.js` 的 `components/check-in-unlock/check-in-unlock`。
+
+- 旧包按累计打卡天数比较 `previous < feature.day && current >= feature.day`。六项依次为：第 1 天晃动弹烟灰，第 2 天烟圈编队／烟雾实验室，第 3 天指向烟圈／记录，第 4 天手指拨烟。同次跨过多个门槛合并显示，只在新打卡成功时触发。
+- 组件展示“累计打卡 · 第 X 天”“新的体验，已解锁”“烟票 +1 · 这些功能现在可以探索了”；每项含标题、“已解锁”和独立完整说明。含 `shakeAsh` 时显示“去设置开启／稍后再说”，否则为“知道了”。设置动作导航到设置页，原打卡页留在返回栈。弹层期间阻止成就通知。
+- 遮罩 `rgba(5,7,7,.84)`；卡片最大宽 600rpx、最大高 90vh、28rpx 圆角，金棕色顶部径向渐变与描边；正常内边距 36rpx 32rpx 28rpx。列表最大 38vh；CSS 高度 ≤640px 时顶部内边距 24rpx、锁区 112rpx、列表外边距 20rpx 且最大 32vh。
+- 卡片 260ms 渐入、上移 16rpx、从 .97 放大到 1；锁梁延迟 240ms 后在 1.68s 内上移 12rpx／顺时针旋转 24°；左右链延迟 240ms 后在 1.76s 内分别向外 40rpx、旋转 12°并消失。锁和链的前 25% 保持关闭／相连。`.reduce-motion` 或 `@media(prefers-reduced-motion:reduce)` 停用这些动效，显示最终开锁态；不是全局停用动效。
+- 当前 Cocos 使用独立弹层组件与目录化功能文案，按 750rpx 换算到 941 设计宽，CanvasTexture 生成渐变、锁链、按钮及分隔线，Graphics 直接写入遮罩 Alpha。曲线以 cubic ease-out 近似 CSS ease-out，字体和阴影由当前浏览器渲染。业务功能是否开放另行实现；本轮未进行画面验证。
+
 ## 旧包分辨率与画布像素
 
 旧包**没有固定 750 × 1770 分辨率**。`components/session-experience/session-experience.js` 的 `prepareSessionCanvas` 通过 `#sessionCanvas` 节点查询取得实际布局宽高 `o.width/o.height`（CSS 像素），分别作为逻辑绘制宽高 `ey/eI`。它再计算倍率 `l = max(1, min(1.75, pixelRatio || 1, sqrt(1250000 / max(1, width × height))))`，将 Canvas 后备位图设为 `round(width × l) × round(height × l)`，并执行 `ctx.scale(l,l)`。因此旧包实际像素尺寸随设备、容器及 DPR 变化，`1250000` 是像素面积控制项，不是一个固定宽高。当前 Cocos 工程采用 750 × 1600 **设计分辨率**并按固定宽度适配浏览器实际高度；两者的设计坐标系不一致，比较烟身宽度/烟雾速度时必须先折算到屏幕 CSS 像素。
@@ -13,6 +37,34 @@ V1.0.7 历史证据文件 SHA-256：`appservice.app.js = 57B60D1D95D5B5F4F608A33
 ## 全包结构与边界
 
 静态索引计 122 个非框架模块：app 1、behaviors 1、config 2、domain 33、presentation 31、services 33、components 16、pages 5。系统不止单根交互，还含烟盒库存、散烟、赠烟、每日解锁、成就、任务、烟票、真实吸烟记录、戒烟日志、历史、广告、分享、麦克风、环境音与烟雾实验室。各模块导出及组件方法名见索引；这些非首版系统在当前 Cocos 工程里大多不存在，**不能用“同名功能占位”宣称规则一致**。
+
+## V1.0.8 全服主页（2026-10-15 补充）
+
+`app-config-1.json` 的第二个 tab 为“全服”，路径 `pages/world/index`，使用自定义导航。模板与最终样式在根目录 `chunk_11.webview.js`，页面逻辑在 `chunk_11.appservice.js`；底部业务导航由 `chunk_2.appservice-1.js` 的 `home/world` 切换处理。主页顺序为品牌“赛博抽烟” → 全服标题与连接/重试状态 → 在线人数/正在赛博抽烟人数 → 全服累计吸烟数/呼气次数 → 全服影响/个人影响 → 免责声明 → 全服商店及“祖国·山河锦绣”商品展示。页面背景 `#0b0e0f`，内容最大宽 520 CSS px，左右 24px、底部 `78px + safe-area-inset-bottom`；≤360px 左右 18px。影响卡最小高 76px、商品展示卡最小高 144px；这些是 CSS px，不是 rpx。
+
+`world-counters` 只在 presenceAvailable 时显示在线/抽烟人数，否则为“—”；累计计数使用字符串并加千位分隔。`world-offline` 仅复用匹配统计版本的合法累计缓存，无缓存时累计为空，不能把离线占位值当在线人数。全服影响需要累计数据就绪，跳转 `/world-tools/pages/impact/index?mode=world`；开启声音时先经过音乐准备。个人影响需先进入全服影响，解锁由 `cyr.world-impact.entered.v1` 记录，跳转同页 `mode=personal`。商店跳 `/world-tools/pages/shop/index`，商品卡跳 `/world-tools/pages/product/index?id=box`。旧包 demoSnapshot 的固定数是演示数据，当前 Cocos 不抄作实际全服统计。
+
+当前 Cocos 只接入主页、底部切换和数据/二级入口接口；正文给用户导航副本预留空间，商品插画与图标为 Graphics 近似。真实服务端、缓存持久化、音乐准备、个人影响首次解锁和二级页面仍未实现，效果由用户验收。
+
+### 全服商店（2026-10-15）
+
+全服主页 `shop` 跳转 `/world-tools/pages/shop/index`，模板和逻辑在 `world-tools/chunk_4.webview.js`、`chunk_4.appservice.js`，公共样式在 `world-tools/webview.app.js`。原生标题“全服商店”，正文同名标题和“把喜欢的片刻，收入珍藏。”，钱包展示本机烟票与山河系列 `count / 6 件`。分类固定为“全部、套装、烟盒、烟圈、烟灰、颜色、打火机”；全部/套装展示套装卡，打火机为专用未上架提示，其余为通用空状态。商品卡点击跳 `product/index?id=box`；分享使用 catchtap，不触发卡片跳转。收藏数来自旧包 national-day-store 的前六件奖励拥有状态，不能用本机烟票数倒推。
+
+公共样式背景 `#100e0e`、内容最大宽 560 CSS px、内边距 `24px 22px 108px`（底部再加安全区）；分类栏上间距 18px、行高/最小高 44px，选中底线 2px。套装卡上间距 18px、最小高 152px、内边距 `12px 14px`、圆角 12px、右侧插画宽 49%/高 122px；空状态上下留白 64px。卡片包含“国庆限定 · 典藏套装”和“截至 2026.10.18”，它们是旧包活动展示文案。当前 Cocos 按用户要求的 375px 手机布局铺满画布，商品卡因完整文案与分享按钮采用 172px 高；真实活动服务、收藏、商品详情和微信分享仍需接入。
+
+## V1.0.8 设置主页（2026-10-15 补充）
+
+证据为 `E:\json\wxd0b7dafebccb8110_unpacked\settings-tools\chunk_0.webview-1.js`、同目录 `chunk_0.appservice-1.js` 及根目录 `app-config-1.json`。首页 `openSettings` 调用页面导航打开 `/settings-tools/pages/settings/settings`，原生导航标题为“设置”。正文为纵向滚动，背景 `#0d0f11`；内容壳最大宽 720rpx，居中，顶部 34rpx、左右 28rpx、底部 `64rpx + safe-area-inset-bottom`。主标题 50rpx；名片卡最小高 154rpx、圆角 26rpx、头像 96rpx。分区上间距 48rpx，设置卡上间距 18rpx、圆角 24rpx，普通行最小高 112rpx、上下 18rpx、左右外留白 24rpx；标题 `max(12px,26rpx)`，说明 `max(12px,20rpx)`。≤340 CSS px 时页面左右内边距改为 22rpx，头像改为 84rpx、部分卡片内边距减少。卡片与行高可随文字换行增长。
+
+内容顺序：设置标题与桌面引导 → 派烟名片 → 体验（音效设置、趣味体验、自然燃烧、轻触觉、晃动弹烟灰、减少动态效果、默认背景、开盒与出盒动效）→ 本地数据与帮助（隐私说明、关于、反馈、占用、清空数据）。出盒动效三选项为“标准切换／短切换／关闭出盒动效”。晃动弹灰累计打卡一天解锁，开启仍需隐私授权。旧包数据清理有确认弹层且仅确认后执行。其账号恢复、200 MB 配额及微信平台能力属于旧包行为，不能直接宣称 Cocos 浏览器实现了这些功能。
+
+背景选择样式另见 `smoke-tools/chunk_0.webview-1.js` 的 `background-picker.wxss`：24 个色块横向滚动；每项宽 52 CSS px、间距 8px、字号 12px，圆形色块 36px，选中描边与勾。当前 Cocos 首版以 Graphics 纯色近似旧包渐变，只展示并滚动查看，不切换会话背景；完整业务与同视口效果待用户验收。
+
+### 添加到我的小程序教程（2026-10-15）
+
+首页 `chunk_6.appservice-1.js` 的 `openDesktopGuide` 在非忙碌、非内联会话状态下打开教程；模板为 `settings-tools/webview.app-1.js` 中的 `settings-tools/components/desktop-guide/desktop-guide-template`，样式及组件逻辑在 `settings-tools/chunk_0.webview-1.js`、`chunk_0.appservice-1.js`。遮罩为 `rgba(2,4,4,.82)`；页面外留白 24rpx，手机宽度底部对齐，CSS 宽度 ≥600px 居中。对话框最大宽 680rpx、圆角 26rpx、背景 `#191a19`、边框 `#66503d`；头部内边距 `28/24/22/28rpx`，尾部 `22/28/26rpx`，中间独立滚动、内边距 `26/28rpx`。
+
+标题“添加到我的小程序”，首次添加送 2 张、从次日起每日 1 张；领取按钮仅在核验状态 `added`、未领取且未处理中启用。教程第一步“点击右上角···”，包含小程序名、胶囊三个点及关闭圆圈示意；第二步“选择添加到我的小程序”，左选项高亮，右侧“添加到桌面”注明“仅快捷入口”。底部根据状态显示“知道了／正在检查…／重新检查／我已添加，检查状态”。首次奖励检查是否添加，日奖励检查是否从“我的小程序”进入；实际发票由 `claimAvailableMyMiniProgramReward` 完成，教程页面本身不直接加票。当前 Cocos 浏览器只接入教程及关闭，状态固定不支持、领取禁用，不冒充已核验或已领取。
 
 ## V1.0.8 今日戒烟页
 
@@ -190,5 +242,7 @@ V1.0.8 `components/session-experience/session-experience.js` 的 `stopSession` �
 - `session-experience.completeAndRoute` 停止输入、音频、特效并写记录后跳结果，有防重复；烟盒来源结果标题通常“这一根，抽完了”，不因主动熄灭就改标题。完整库存结算另有规则（见 [旧包参考](legacy-reference.md)）。
 
 ## 仍未达到“全包逐方法语义”的部分
+
+2026-10-16 实验室扩展：已核对旧包首页入口、全屏组件、六分类、三级方案保存／恢复、每日权限与编队前置条件，并开始迁移本机实现。颜色、轨迹和互动的 Cocos 消费代码不代表旧包逐参数动态等效；真实分享／广告、任务奖励、集藏与好友模式仍待接入。具体来源、边界与检查见 [烟雾实验室](smoke-lab.md)。下段为最初三页面阶段的审计范围记录，后续扩展按各专题文档更新。
 
 索引列出其余 100 余模块的导出和静态方法，但库存、奖励、广告、登录权限、分享、好友、记录、实验室等没有逐内部函数做数据流审计，也没有在微信运行时验证。原因是当前交付仅三个页面、旧包为压缩编译产物。本文不会将这些模块的存在写成已迁移、已测试或图形等效。若后续把它们纳入需求，应以索引中的模块为入口逐个做同等级的规则审计。

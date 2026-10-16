@@ -70,6 +70,7 @@ export class SessionModel {
   private smokeRingCount = 0;
   private currentPuffCounted = false;
   private lastInhaleSeconds = 0;
+  private unlimitedRings = false;
 
   constructor(tuning: Partial<SessionTuning> = {}) {
     this.tuning = { ...DEFAULT_SESSION_TUNING, ...tuning };
@@ -140,13 +141,15 @@ export class SessionModel {
     return this.accept();
   }
 
-  /** Basic gesture ring; formation/unlimited-ring unlocks are out of scope. */
+  /** Daily access can change without replacing the active session or resetting its counters. */
+  public setUnlimitedRings(enabled: boolean): void { this.unlimitedRings = enabled; }
+
   public emitSmokeRing(): SessionActionResult {
     if (this.phase !== SessionPhase.EXHALING) {
       return this.reject(this.phase === SessionPhase.INHALING
         ? '还在吸气，吐气时再喷烟圈' : '吐气时才能喷烟圈');
     }
-    if (this.smokeRingCount >= this.tuning.smokeRingLimit) {
+    if (!this.unlimitedRings && this.smokeRingCount >= this.tuning.smokeRingLimit) {
       return this.reject(`这支烟的 ${this.tuning.smokeRingLimit} 次烟圈已用完`);
     }
     this.smokeRingCount += 1;

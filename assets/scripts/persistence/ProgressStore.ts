@@ -62,6 +62,23 @@ function isProgressSaveV2(value: unknown): value is ProgressSaveV2 {
 export class ProgressStore {
   constructor(private readonly storage: KeyValueStorage | null) {}
 
+  /** Seed only the lifetime total; no fabricated session timestamps or today's cigarettes. */
+  public initializePreview(smokedCigarettes: number, now = Date.now()): boolean {
+    if (!this.storage || !Number.isSafeInteger(smokedCigarettes) || smokedCigarettes < 0
+      || !Number.isFinite(now) || now < 0) return false;
+    try {
+      if (this.storage.getItem(STORAGE_KEY_V1) !== null
+        || this.storage.getItem(STORAGE_KEY_V2) !== null) return false;
+      const save: ProgressSaveV2 = { version: 2, smokedCigarettes,
+        lastCompletedSessionId: null, lastCompletedAt: null, day: localDay(now), todaySmoked: 0 };
+      const encoded = JSON.stringify(save);
+      this.storage.setItem(STORAGE_KEY_V2, encoded);
+      return this.storage.getItem(STORAGE_KEY_V2) === encoded;
+    } catch {
+      return false;
+    }
+  }
+
   /** Null means storage is unavailable or invalid, not that the count is zero. */
   public readSmokedCount(): number | null {
     try {

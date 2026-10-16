@@ -2,11 +2,14 @@ import { Color, gfx, ImageAsset, Node, screen, Sprite, SpriteFrame, Texture2D, U
 import { createNode, Palette } from '../../common/UiFactory';
 import { SessionPhase, SessionSnapshot } from '../../domain/SessionModel';
 import { CanvasTexture } from './CanvasTexture';
+import { amountMultiplier, colorHex, DEFAULT_SMOKE_SCHEME, SmokeScheme } from '../../lab/SmokeLabModel';
+import { exhaleVelocity, ringPoint } from '../../lab/SmokeMotion';
 
 interface SmokeParticle {
   x: number; y: number; vx: number; vy: number;
   age: number; lifetime: number; size: number; scale: number; opacity: number;
   rotation: number; spin: number;
+  style: string;
 }
 
 interface RingParticle {
@@ -14,6 +17,7 @@ interface RingParticle {
   radius: number; growth: number; tube: number; opacity: number;
   age: number; lifetime: number; tilt: number; wobble: number;
   wave3: number; wave5: number; oval: number; ovalPhase: number; density: number;
+  shape: string; formation: string | null; order: number;
 }
 
 /** Screen-space breathing halo and lower-origin human exhale. */
@@ -31,6 +35,15 @@ export class BreathEffects {
   private haloVisible = false;
   private ringsVisible = false;
   private displayHeight = 0;
+  private scheme: SmokeScheme = { ...DEFAULT_SMOKE_SCHEME };
+
+  public setScheme(scheme: SmokeScheme): void { this.scheme = { ...scheme }; }
+
+  public displaceSmoke(dx: number, dy: number): void {
+    const x = Math.max(-45, Math.min(45, dx)), y = Math.max(-45, Math.min(45, dy));
+    for (const p of this.particles) { p.vx += x * 1.4; p.vy += y * 1.4; }
+    for (const ring of this.rings) { ring.vx += x * 0.6; ring.vy += y * 0.6; }
+  }
 
   private cssScale(): number {
     const frameWidth = screen.windowSize.width / (screen.devicePixelRatio || 1);
@@ -87,6 +100,8 @@ export class BreathEffects {
       p.age += delta;
       p.vx *= Math.pow(0.985, 60 * delta);
       p.vy += 4 * cssScale * delta;
+      if (p.style === 'spiral') p.vx += Math.sin(p.age * 5 + p.rotation) * 30 * cssScale * delta;
+      if (p.style === 'twin' && p.age > 0.6) p.vx -= p.x * delta * 1.2;
       p.x += p.vx * delta;
       p.y += p.vy * delta;
       p.scale += 0.62 * delta;
@@ -102,13 +117,16 @@ export class BreathEffects {
       ring.vy += 4.2 * 1.92 * delta;
       ring.x += (ring.vx + 7 * 1.92 * Math.sin(1.55 * ring.age + ring.wobble)) * delta;
       ring.y += ring.vy * delta;
+      if (ring.formation === 'helix') ring.x += Math.cos(ring.age * 3.2 + ring.order * Math.PI) * 60 * delta;
+      if (ring.formation === 'weave') ring.x += Math.sin(ring.age * 2.8 + ring.order) * 100 * delta;
+      if (ring.formation === 'chase') ring.vy += (ring.order % 2 ? 10 : -5) * delta;
     }
     this.rings = this.rings.filter((ring) => ring.age < ring.lifetime);
     this.render(snapshot);
   }
 
   /** Old emitRing default circle parameters, converted from CSS pixels to design units. */
-  public emitRing(strength: number): void {
+  public emitRing(strength: number, motion?: { vx: number; vy: number }, formation: string | null = null, order = 0, redraw = true): void {
     const serial = this.ringSerial++;
     const random = (channel: number): number => {
       const value = Math.sin((serial + 1) * 193.17 + channel * 71.19) * 43758.5453;
@@ -134,14 +152,30 @@ export class BreathEffects {
       oval: between(0, 0.08, 12),
       ovalPhase: between(0, Math.PI, 13),
       density: between(1.04, 1.46, 14),
+      shape: this.scheme.ringShape, formation, order,
     });
+    const ring = this.rings[this.rings.length - 1];
+    if (motion) { ring.vx = motion.vx * this.cssScale(); ring.vy = motion.vy * this.cssScale(); }
+    if (formation) {
+      ring.y += order * 21;
+      ring.x += formation === 'helix' ? (order % 2 ? 1 : -1) * 40 : formation === 'weave' ? (order % 2 ? 1 : -1) * order * 15 : 0;
+      ring.radius *= formation === 'tunnel' ? 0.55 + order * 0.16 : 0.75;
+      ring.vy *= 0.8 + order * 0.12;
+    }
+    if (this.rings.length > 32) this.rings.splice(0, this.rings.length - 32);
+    if (redraw) this.renderRings();
+  }
+
+  public emitFormation(strength: number, preset: string): void {
+    const count = preset === 'helix' ? 8 : 6;
+    for (let index = 0; index < count; index++) this.emitRing(strength, undefined, preset, index, false);
     this.renderRings();
   }
 
   private emitExhale(strength: number): void {
     const cssScale = this.cssScale();
     const scaled = Math.pow(strength, 1.16);
-    const count = Math.max(4, Math.floor(10 + 48 * strength));
+    const count = Math.max(4, Math.floor((10 + 48 * strength) * amountMultiplier(this.scheme.smokeAmount)));
     const spreadX = 18 + 54 * scaled;
     const spreadY = 12 + 28 * scaled;
     const burst = this.burstNumber++;
@@ -151,11 +185,13 @@ export class BreathEffects {
     };
     for (let index = 0; index < count; index += 1) {
       const size = 12 + 10 * strength + random(index, 4) * (18 + 46 * scaled);
+      const motion = exhaleVelocity(this.scheme.exhaleStyle, index, count,
+        (random(index, 2) - 0.5) * (20 + 132 * scaled) * cssScale,
+        (18 + random(index, 3) * (28 + 88 * scaled)) * cssScale, cssScale);
       this.particles.push({
-        x: (random(index, 0) - 0.5) * spreadX * cssScale,
-        y: this.exhaleOriginY() + (random(index, 1) - 0.5) * spreadY * cssScale,
-        vx: (random(index, 2) - 0.5) * (20 + 132 * scaled) * cssScale,
-        vy: (18 + random(index, 3) * (28 + 88 * scaled)) * cssScale,
+        x: (random(index, 0) - 0.5) * spreadX * cssScale * (this.scheme.exhaleStyle === 'stream' ? 0.18 : 1) + motion.x,
+        y: this.exhaleOriginY() + (random(index, 1) - 0.5) * spreadY * cssScale + motion.y,
+        vx: motion.vx, vy: motion.vy,
         age: 0,
         lifetime: 1.35 + random(index, 5) * (0.65 + 2.1 * scaled),
         size: size * cssScale,
@@ -163,6 +199,7 @@ export class BreathEffects {
         opacity: 0.27 + random(index, 6) * (0.22 + 0.2 * strength),
         rotation: random(index, 7) * Math.PI * 2,
         spin: (random(index, 8) - 0.5) * 0.22,
+        style: this.scheme.exhaleStyle,
       });
     }
     if (this.particles.length > 220) this.particles.splice(0, this.particles.length - 220);
@@ -173,11 +210,13 @@ export class BreathEffects {
       this.drawHalo(Palette.orange, Math.min(1, snapshot.phaseElapsedSeconds / 3));
     } else if (snapshot.phase === SessionPhase.EXHALING) {
       const remaining = 1 - Math.min(1, snapshot.phaseElapsedSeconds / Math.max(0.01, snapshot.lastInhaleSeconds));
-      this.drawHalo('#eef0ed', Math.min(1, snapshot.lastInhaleSeconds / 3) * remaining);
+      this.drawHalo(colorHex(this.scheme.exhaleColor), Math.min(1, snapshot.lastInhaleSeconds / 3) * remaining);
     } else if (this.haloVisible) {
       this.halo.clear();
       this.haloVisible = false;
     }
+    const hex = colorHex(this.scheme.exhaleColor).slice(1);
+    const red = parseInt(hex.slice(0, 2), 16), green = parseInt(hex.slice(2, 4), 16), blue = parseInt(hex.slice(4, 6), 16);
     for (let index = 0; index < this.particles.length; index += 1) {
       const p = this.particles[index];
       const sprite = this.smokeSprites[index] ?? this.addSmokeSprite();
@@ -187,10 +226,7 @@ export class BreathEffects {
       sprite.node.setPosition(p.x, p.y);
       sprite.node.setScale(2 * radius / 96, 1.56 * radius / 96);
       sprite.node.angle = -0.08 * p.rotation * 180 / Math.PI;
-      sprite.color = new Color(
-        Math.round(217 * intensity), Math.round(218 * intensity),
-        Math.round(214 * intensity), 255,
-      );
+      sprite.color = new Color(Math.round(red * intensity), Math.round(green * intensity), Math.round(blue * intensity), 255);
     }
     for (let index = this.particles.length; index < this.smokeSprites.length; index += 1) {
       this.smokeSprites[index].node.active = false;
@@ -205,6 +241,8 @@ export class BreathEffects {
       return;
     }
     this.ringsVisible = true;
+    const hex = colorHex(this.scheme.ringColor).slice(1);
+    const rgb = `${parseInt(hex.slice(0, 2), 16)},${parseInt(hex.slice(2, 4), 16)},${parseInt(hex.slice(4, 6), 16)}`;
     this.ringCanvas.redraw((ctx) => {
       for (const ring of this.rings) {
         const progress = Math.min(1, ring.age / ring.lifetime);
@@ -214,9 +252,9 @@ export class BreathEffects {
         ctx.translate(ring.x, ring.y);
         ctx.scale(1, ring.tilt);
         const haze = ctx.createRadialGradient(0, 0, Math.max(0, ring.radius - 2 * ring.tube), 0, 0, outer);
-        haze.addColorStop(0, 'rgba(184,212,220,0)');
-        haze.addColorStop(0.56, `rgba(184,212,220,${alpha * (0.05 + 0.16 * progress)})`);
-        haze.addColorStop(1, 'rgba(184,212,220,0)');
+        haze.addColorStop(0, `rgba(${rgb},0)`);
+        haze.addColorStop(0.56, `rgba(${rgb},${alpha * (0.05 + 0.16 * progress)})`);
+        haze.addColorStop(1, `rgba(${rgb},0)`);
         ctx.fillStyle = haze;
         ctx.beginPath(); ctx.arc(0, 0, outer, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
@@ -225,16 +263,17 @@ export class BreathEffects {
           const deformation = 1 + Math.sin(3 * theta + ring.wobble) * ring.wave3
             + Math.sin(5 * theta - 0.7 * ring.wobble) * ring.wave5
             + Math.cos(2 * theta + ring.ovalPhase) * ring.oval;
-          const x = ring.x + Math.cos(theta) * ring.radius * deformation;
-          const y = ring.y + Math.sin(theta) * ring.radius * ring.tilt * deformation;
+          const point = ringPoint(ring.shape, theta);
+          const x = ring.x + point.x * ring.radius * deformation;
+          const y = ring.y + point.y * ring.radius * (ring.shape === 'circle' ? ring.tilt : 0.85) * deformation;
           const depth = 0.5 * Math.sin(theta) + 0.5;
           const flicker = 0.5 * Math.sin(2.17 * index + ring.wobble) + 0.5;
           const puff = ring.tube * (1.72 + 1.12 * progress)
             * (0.86 + 0.28 * depth) * (0.94 + 0.12 * flicker);
           const gradient = ctx.createRadialGradient(x, y, 0, x, y, puff);
-          gradient.addColorStop(0, `rgba(184,212,220,${Math.min(0.92, alpha * (0.38 - 0.08 * progress) * ring.density * (0.72 + 0.28 * depth))})`);
-          gradient.addColorStop(0.48, `rgba(184,212,220,${alpha * (0.14 + 0.08 * flicker) * ring.density * (1 - 0.32 * progress)})`);
-          gradient.addColorStop(1, 'rgba(184,212,220,0)');
+          gradient.addColorStop(0, `rgba(${rgb},${Math.min(0.92, alpha * (0.38 - 0.08 * progress) * ring.density * (0.72 + 0.28 * depth))})`);
+          gradient.addColorStop(0.48, `rgba(${rgb},${alpha * (0.14 + 0.08 * flicker) * ring.density * (1 - 0.32 * progress)})`);
+          gradient.addColorStop(1, `rgba(${rgb},0)`);
           ctx.fillStyle = gradient;
           ctx.beginPath(); ctx.arc(x, y, puff, 0, Math.PI * 2); ctx.fill();
         }

@@ -108,6 +108,8 @@ export class QuitController extends Component {
     this.pageRoot.setPosition(view.getVisibleSize().width, 0);
   }
 
+  public presentPrice(): void { this.present(); this.openPrice(); }
+
   public dismiss(): void {
     this.slide = null;
     this.hold = null;

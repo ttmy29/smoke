@@ -5,6 +5,9 @@ import { color, createLabel, createNode, createRect, DESIGN_HEIGHT, DESIGN_WIDTH
 import { CanvasTexture } from '../session/effects/CanvasTexture';
 import { CheckInSnapshot, CheckInStore } from '../persistence/CheckInStore';
 import { PreviewRewardedVideoGateway, RewardedVideoGateway, RewardedVideoResult } from '../services/RewardedVideo';
+import { CheckInUnlock } from './CheckInUnlock';
+import { newlyUnlockedFeatures } from './CheckInUnlockCatalog';
+import { ENABLE_AD_PREVIEW } from '../config/InitialSettings';
 
 const { ccclass } = _decorator;
 
@@ -37,9 +40,7 @@ export class CheckInController extends Component {
   private extraDone!: Node;
   private notice!: Label;
   private adOverlay!: Node;
-  private unlockOverlay!: Node;
-  private unlockTitle!: Label;
-  private unlockDescription!: Label;
+  private unlock!: CheckInUnlock;
   private adResolver: ((result: RewardedVideoResult) => void) | null = null;
   private adGateway!: RewardedVideoGateway;
   private busy = false;
@@ -49,19 +50,21 @@ export class CheckInController extends Component {
   private onChanged: (() => void) | null = null;
   private store!: CheckInStore;
 
+  public get isUnlockOpen(): boolean { return this.unlock?.isOpen ?? false; }
+
   public initialize(store: CheckInStore, onBack: () => void, onChanged: () => void,
-    gateway?: RewardedVideoGateway): void {
+    gateway?: RewardedVideoGateway, onOpenSettings: () => void = () => {}): void {
     this.store = store;
     this.onBack = onBack;
     this.onChanged = onChanged;
-    this.build();
-    this.adGateway = gateway ?? new PreviewRewardedVideoGateway(() => this.presentPreviewAd());
+    this.build(onOpenSettings);
+    this.adGateway = gateway ?? new PreviewRewardedVideoGateway(() => this.presentPreviewAd(), ENABLE_AD_PREVIEW);
   }
 
   public present(): void {
     this.busy = false;
     this.adOverlay.active = false;
-    this.unlockOverlay.active = false;
+    this.unlock.dismiss();
     this.notice.string = '';
     this.refresh();
     this.resizeViewport();
@@ -73,6 +76,7 @@ export class CheckInController extends Component {
 
   public dismiss(): void {
     this.resolvePreviewAd('cancelled');
+    this.unlock?.dismiss();
     this.busy = false;
     this.slideDirection = null;
     this.pageRoot?.setPosition(0, 0);
@@ -102,7 +106,7 @@ export class CheckInController extends Component {
   }
 
   private beginBack(): void {
-    if (this.busy || this.slideDirection || this.unlockOverlay.active || this.adOverlay.active) return;
+    if (this.busy || this.slideDirection || this.isUnlockOpen || this.adOverlay.active) return;
     this.slideDirection = 'out';
     this.slideElapsed = 0;
   }
@@ -147,7 +151,7 @@ export class CheckInController extends Component {
   }
 
   private checkInToday(): void {
-    if (this.busy || this.snapshot?.checkedToday || !this.snapshot) return;
+    if (this.busy || this.isUnlockOpen || this.snapshot?.checkedToday || !this.snapshot) return;
     const previousDays = this.snapshot.cumulativeDays;
     this.busy = true;
     this.refresh();
@@ -165,19 +169,11 @@ export class CheckInController extends Component {
   }
 
   private showUnlocks(previousDays: number, currentDays: number): void {
-    const unlocked: string[] = [];
-    if (previousDays < 1 && currentDays >= 1) unlocked.push('晃动弹烟灰');
-    if (previousDays < 2 && currentDays >= 2) unlocked.push('烟圈编队', '烟雾实验室');
-    if (previousDays < 3 && currentDays >= 3) unlocked.push('指向烟圈', '记录');
-    if (previousDays < 4 && currentDays >= 4) unlocked.push('手指拨烟');
-    if (unlocked.length === 0) return;
-    this.unlockTitle.string = `打卡第 ${currentDays} 天`;
-    this.unlockDescription.string = `解锁：${unlocked.join('、')}`;
-    this.unlockOverlay.active = true;
+    this.unlock.present(currentDays, newlyUnlockedFeatures(previousDays, currentDays));
   }
 
   private async claimExtraTicket(): Promise<void> {
-    if (this.busy || !this.snapshot?.checkedToday || this.snapshot.extraTicketClaimed) return;
+    if (this.busy || this.isUnlockOpen || !this.snapshot?.checkedToday || this.snapshot.extraTicketClaimed) return;
     this.busy = true;
     let result: RewardedVideoResult;
     try {
@@ -240,7 +236,7 @@ export class CheckInController extends Component {
     this.checkButtonLabel.color = color(this.checkButton.interactable ? '#191512' : '#aba59b');
   }
 
-  private build(): void {
+  private build(onOpenSettings: () => void): void {
     const shield = createNode('CheckInputShield', this.node, DESIGN_WIDTH, 2400);
     shield.addComponent(BlockInputEvents);
     this.pageRoot = createNode('CheckPageRoot', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
@@ -390,19 +386,8 @@ export class CheckInController extends Component {
     adCancel.on(Button.EventType.CLICK, () => this.resolvePreviewAd('cancelled'));
     this.adOverlay.active = false;
 
-    this.unlockOverlay = createRect('UnlockOverlay', this.pageRoot, DESIGN_WIDTH, 2400, '#070808');
-    this.unlockOverlay.addComponent(BlockInputEvents);
-    const unlockCard = createRect('UnlockCard', this.unlockOverlay, 600, 420,
-      '#191c1b', 0, 0, 28, '#8b7149');
-    createLabel('UnlockEyebrow', unlockCard, '新的内容已解锁', 22, '#cdb181', 500, 42, 0, 145);
-    this.unlockTitle = createLabel('UnlockTitle', unlockCard, '', 40, '#f0e4d0', 520, 70, 0, 76);
-    this.unlockDescription = createLabel('UnlockDescription', unlockCard, '', 25,
-      '#c7b9a0', 510, 106, 0, -14);
-    const unlockClose = createRect('UnlockClose', unlockCard, 420, 72,
-      '#5c4930', 0, -137, 12, '#d6b477');
-    unlockClose.addComponent(Button).transition = Button.Transition.SCALE;
-    createLabel('UnlockCloseText', unlockClose, '知道了', 26, '#f0e4d0', 400, 60);
-    unlockClose.on(Button.EventType.CLICK, () => { this.unlockOverlay.active = false; });
-    this.unlockOverlay.active = false;
+    const unlockNode = createNode('UnlockOverlay', this.pageRoot, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.unlock = unlockNode.addComponent(CheckInUnlock);
+    this.unlock.initialize(onOpenSettings);
   }
 }

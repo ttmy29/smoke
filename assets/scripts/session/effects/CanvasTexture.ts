@@ -38,6 +38,8 @@ export class CanvasTexture {
     this.node.getComponent(UITransform)?.setContentSize(nextWidth, nextHeight);
     this.imageAsset.reset(this.canvas);
     this.texture.image = this.imageAsset;
+    // Texture2D keeps its identity when resized; refresh the frame rectangle and UVs too.
+    this.frame.reset({ texture: this.texture }, true);
   }
 
   public redraw(paint: (ctx: CanvasRenderingContext2D) => void): void {

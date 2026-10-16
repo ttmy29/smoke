@@ -12,11 +12,13 @@ export interface RewardedVideoGateway {
 
 /** Development preview, never claims an ad was watched without an explicit action. */
 export class PreviewRewardedVideoGateway implements RewardedVideoGateway {
-  constructor(private readonly present: () => Promise<RewardedVideoResult>) {}
+  constructor(private readonly present: () => Promise<RewardedVideoResult>,
+    private readonly enabled = true) {}
 
   public show(request: RewardedVideoRequest): Promise<RewardedVideoResult> {
     if ((request.placement !== 'pack:refill' && request.placement !== 'checkin:extra-ticket')
       || !request.resourceId) return Promise.resolve('error');
+    if (!this.enabled) return Promise.resolve('unavailable');
     return this.present();
   }
 }

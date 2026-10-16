@@ -3,8 +3,8 @@ import { ACHIEVEMENT_GROUPS, SPECIAL_ACHIEVEMENT } from '../achievement/Achievem
 import type { AchievementResult, AchievementSource } from '../achievement/AchievementController';
 
 export const ACHIEVEMENT_STORAGE_KEY = 'smoke.achievements.v1';
-const IDS = new Set([...ACHIEVEMENT_GROUPS.flatMap((group) =>
-  group.items.map((item) => item.id)), SPECIAL_ACHIEVEMENT.id]);
+const IDS = new Set([...ACHIEVEMENT_GROUPS.reduce<string[]>((ids, group) =>
+  ids.concat(group.items.map((item) => item.id)), []), SPECIAL_ACHIEVEMENT.id]);
 
 interface StoredResult {
   id: string;

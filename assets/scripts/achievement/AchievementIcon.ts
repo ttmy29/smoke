@@ -78,7 +78,7 @@ export function createAchievementIcon(parent: Node, id: string,
       g.bezierCurveTo(-8, -5, -5, 8, 10, 20); g.fill(); break;
     case 'sunrise':
       line(-20, -12, 20, -12);
-      g.arc(0, -12, 12, 0, Math.PI); g.stroke();
+      g.arc(0, -12, 12, 0, Math.PI, false); g.stroke();
       line(0, 7, 0, 18); line(-17, 5, -22, 10); line(17, 5, 22, 10);
       break;
     default:

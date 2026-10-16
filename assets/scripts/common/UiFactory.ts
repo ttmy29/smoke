@@ -11,8 +11,8 @@ import {
   Widget,
 } from 'cc';
 
-export const DESIGN_WIDTH = 750;
-export const DESIGN_HEIGHT = 1600;
+export const DESIGN_WIDTH = 941;
+export const DESIGN_HEIGHT = 1672;
 
 export interface WidgetEdges {
   left?: number;

@@ -157,7 +157,7 @@
     },
     {
       "name": "chunks:///_virtual/Interlocking",
-      "filename": "Interlocking",
+      "filename": "Interlocking.js",
       "bytes": 743,
       "decodedReferences": 0,
       "aliases": [

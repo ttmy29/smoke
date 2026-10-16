@@ -55,6 +55,7 @@ export class QuitJournalController extends Component {
   private detailScroll!: ScrollView;
   private detailContent!: Node;
   private detailDay: string | null = null;
+  private directDay = false;
   private detailVisible = 20;
   private detailSlide: 'in' | 'out' | null = null;
   private detailSlideTime = 0;
@@ -74,6 +75,8 @@ export class QuitJournalController extends Component {
   }
 
   public present(): void {
+    this.directDay = false;
+    for (const child of this.node.children) child.active = true;
     this.visible = 20;
     this.detail.active = false;
     this.detailDay = null;
@@ -85,6 +88,19 @@ export class QuitJournalController extends Component {
     this.node.setPosition(view.getVisibleSize().width, 0);
     this.slide = 'in';
     this.slideTime = 0;
+  }
+
+  /** Open one day directly above the records page, returning there when the detail closes. */
+  public presentDay(day: string): boolean {
+    const history = this.store.readHistory();
+    const row = history ? this.rows(history).find((item) => item.day === day) : undefined;
+    if (!row) return false;
+    this.present();
+    this.slide = null; this.node.setPosition(0, 0);
+    this.directDay = true;
+    for (const child of this.node.children) if (child !== this.detail) child.active = false;
+    this.openDay(row);
+    return true;
   }
 
   public dismiss(): void {
@@ -128,7 +144,10 @@ export class QuitJournalController extends Component {
       if (progress >= 1) {
         const leaving = this.detailSlide === 'out';
         this.detailSlide = null;
-        if (leaving) { this.detail.active = false; this.detailDay = null; }
+        if (leaving) {
+          this.detail.active = false; this.detailDay = null;
+          if (this.directDay) this.dismiss();
+        }
       }
     }
   }

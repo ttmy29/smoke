@@ -1,7 +1,9 @@
-import { _decorator, BlockInputEvents, Button, Component, EventTouch, Graphics, HorizontalTextAlignment, Label, Mask, Node, resources, screen, Sprite, SpriteFrame, UITransform, UIOpacity, Vec3, view, Widget } from 'cc';
+import { _decorator, BlockInputEvents, Button, Component, EventTouch, Graphics, HorizontalTextAlignment, instantiate, Label, Mask, Node, resources, screen, Sprite, SpriteFrame, UITransform, UIOpacity, Vec3, view, Widget } from 'cc';
 import { AssetCatalog } from '../assets/AssetCatalog';
 import { alignWidget, color, createButton, createLabel, createNode, createRect, DESIGN_HEIGHT, DESIGN_WIDTH, Palette } from '../common/UiFactory';
 import { CanvasTexture } from '../session/effects/CanvasTexture';
+import { UIButton } from '../common/UIButton';
+import { TextSweep } from '../common/TextSweep';
 import { countAvailableSlots, PackSnapshot } from '../persistence/PackStore';
 import type { HomeSmokingStatus } from '../persistence/ProgressStore';
 import type { CheckInSnapshot } from '../persistence/CheckInStore';
@@ -16,6 +18,11 @@ export interface ExtractionSource {
   coverTop: number;
   frontOccluders: Array<{ left: number; right: number; top: number }>;
   liftRatio: number;
+}
+
+export interface BottomNavigationHandlers {
+  onSmokeTab?: () => void;
+  onWorldTab?: () => void;
 }
 
 type SideCardKind = 'records' | 'lab' | 'switch' | 'today' | 'gift';
@@ -33,7 +40,13 @@ interface SideCardLayout {
 
 @ccclass('HomeController')
 export class HomeController extends Component {
-  public static readonly PACK_FILTER_HEIGHT = 600 * 0.52;
+  private static readonly PACK_BOX_WIDTH = 330;
+  private static readonly PACK_BOX_HEIGHT = 600;
+  private static readonly PACK_DISPLAY_WIDTH = 502;
+  private static readonly PACK_DISPLAY_HEIGHT = 728;
+  private static readonly PACK_POSITION_X = -185;
+  private static readonly PACK_POSITION_Y = -50;
+  public static readonly PACK_FILTER_HEIGHT = HomeController.PACK_BOX_HEIGHT * 0.52;
   private static readonly LID_SECONDS = 0.5;
   private onStart: ((slotIndex: number) => void) | null = null;
   private onSupply: (() => void) | null = null;
@@ -44,6 +57,12 @@ export class HomeController extends Component {
   private onQuit: (() => void) | null = null;
   private onRanking: (() => void) | null = null;
   private onAchievement: (() => void) | null = null;
+  private onSettings: (() => void) | null = null;
+  private onDesktopGuide: (() => void) | null = null;
+  private onRecords: (() => void) | null = null;
+  private onLab: (() => void) | null = null;
+  private recordsHint: Node | null = null;
+  private bottomNavigationHandlers: BottomNavigationHandlers = {};
   private checkInSnapshot: CheckInSnapshot | null = null;
   private contentRoot!: Node;
   private headerRoot!: Node;
@@ -99,11 +118,26 @@ export class HomeController extends Component {
   private encouragementLabel!: Label;
   private encouragementChipWidth = 0;
   private inventorySegments: Array<{ filled: CanvasTexture; empty: CanvasTexture }> = [];
+  private topPrefab: Node | null = null;
+  private prefabPackLabel: Label | null = null;
+  private prefabInventoryIcons: Node[] = [];
+  private bottomPrefab: Node | null = null;
+  private prefabStartButton: UIButton | null = null;
+  private prefabStartLabel: Label | null = null;
+  private prefabStartSweep: TextSweep | null = null;
+  private sidePrefab: Node | null = null;
+  private prefabRecordLock: Node | null = null;
+  private prefabLabLock: Node | null = null;
+  private prefabRecordHint: Label | null = null;
+  private prefabLabHint: Label | null = null;
+  private prefabLastSmoke: Label | null = null;
+  private prefabTodaySmoked: Label | null = null;
+  private prefabStreak: Label | null = null;
+  private prefabCheckInState: Label | null = null;
   private startButton!: Button;
   private startButtonLabel!: Label;
-  private startSweep!: CanvasTexture;
-  private sweepElapsed = 0;
-  private sweepDrawElapsed = 0;
+  private startTextSweep: TextSweep | null = null;
+  private textMeasureContext: CanvasRenderingContext2D | null = null;
   private pack: PackSnapshot | null = null;
   private extractingSlot: number | null = null;
   private closedLidOpacity!: UIOpacity;
@@ -120,7 +154,8 @@ export class HomeController extends Component {
     onOpenLid: (instanceId: string) => PackSnapshot | null,
     onReadHomeSmokingStatus: () => HomeSmokingStatus | null,
     onCheckIn: () => void, onReadCheckInStatus: () => CheckInSnapshot | null,
-    onQuit: () => void, onRanking: () => void, onAchievement: () => void): void {
+    onQuit: () => void, onRanking: () => void, onAchievement: () => void,
+    onSettings?: () => void, onDesktopGuide?: () => void, onRecords?: () => void, onLab?: () => void): void {
     this.onStart = onStart;
     this.onSupply = onSupply;
     this.onOpenLid = onOpenLid;
@@ -129,8 +164,27 @@ export class HomeController extends Component {
     this.onQuit = onQuit;
     this.onRanking = onRanking;
     this.onAchievement = onAchievement;
+    this.onSettings = onSettings ?? null;
+    this.onDesktopGuide = onDesktopGuide ?? null;
+    this.onRecords = onRecords ?? null;
+    this.onLab = onLab ?? null;
     this.onReadCheckInStatus = onReadCheckInStatus;
     this.build();
+  }
+
+  /** Optional navigation hooks; unset handlers leave the two tabs silent. */
+  public setBottomNavigationHandlers(handlers: BottomNavigationHandlers): void {
+    this.bottomNavigationHandlers = { ...handlers };
+  }
+
+  private activateSmokeTab(): void {
+    if (this.entryMode || this.lidAnimating) return;
+    this.bottomNavigationHandlers.onSmokeTab?.();
+  }
+
+  private activateWorldTab(): void {
+    if (this.entryMode || this.lidAnimating) return;
+    this.bottomNavigationHandlers.onWorldTab?.();
   }
 
   protected update(deltaTime: number): void {
@@ -142,13 +196,19 @@ export class HomeController extends Component {
       this.setCheckInSnapshot(this.onReadCheckInStatus?.() ?? null);
     }
     if (this.lidAnimating) this.updateLid(deltaTime);
-    if (this.startSweep && !this.entryMode && this.pack) {
-      this.sweepElapsed = (this.sweepElapsed + Math.max(0, deltaTime)) % 2.8;
-      this.sweepDrawElapsed += Math.max(0, deltaTime);
-      if (this.sweepDrawElapsed >= 1 / 30) {
-        this.sweepDrawElapsed = 0;
-        this.paintStartSweep();
-      }
+  }
+
+  protected onEnable(): void {
+    this.setCanvasPrefabsVisible(true);
+  }
+
+  protected onDisable(): void {
+    this.setCanvasPrefabsVisible(false);
+  }
+
+  private setCanvasPrefabsVisible(visible: boolean): void {
+    for (const node of [this.topPrefab, this.bottomPrefab, this.sidePrefab]) {
+      if (node?.isValid) node.active = visible;
     }
   }
 
@@ -161,13 +221,223 @@ export class HomeController extends Component {
     }
     this.inventorySegments = [];
     this.encouragementChip?.dispose();
-    this.startSweep?.dispose();
     this.backgroundTexture?.dispose();
+  }
+
+  private bindPrefabButton(container: Node | null, handler: (() => void) | null = null): UIButton | null {
+    const background = container?.getChildByName('bg') ?? container?.getChildByName('来一根按钮');
+    if (!container || !background) return null;
+    const parentButton = container.getComponent(Button);
+    if (parentButton) parentButton.enabled = false;
+    const control = UIButton.bind(background, handler);
+    if (!background.getComponent(Sprite)) {
+      const foreground = container.getChildByName('icon') ?? container.getChildByName('烟');
+      control.visualTarget = foreground;
+      control.setTintTarget(foreground?.getComponent(Sprite) ?? null);
+    }
+    return control;
+  }
+
+  /** The edited Sprite prefab owns the visible home header and inventory bar. */
+  public attachTopPrefab(top: Node): void {
+    this.topPrefab = top;
+    this.bindPrefabButton(top.getChildByName('ts'), () => {
+      if (!this.entryMode && !this.lidAnimating) this.onDesktopGuide?.();
+    });
+    const settingsIcon = top.getChildByName('button1')?.getChildByName('icon');
+    if (settingsIcon) {
+      const parentButton = settingsIcon.parent?.getComponent(Button);
+      if (parentButton) parentButton.enabled = false;
+      UIButton.bind(settingsIcon, () => {
+        if (!this.entryMode && !this.lidAnimating) this.onSettings?.();
+      });
+    }
+    this.headerRoot.active = false;
+    this.quickRoot.active = false;
+    this.noticeRoot.active = false;
+    this.secondaryNodes = this.secondaryNodes.filter((node) =>
+      node !== this.headerRoot && node !== this.quickRoot && node !== this.noticeRoot);
+    this.secondaryNodes.push(top);
+    this.collectSecondaryOpacity(top);
+
+    const actions: Array<[string, (() => void) | null]> = [
+      ['button2', this.onCheckIn], ['button3', this.onQuit],
+      ['button4', this.onRanking], ['button5', this.onAchievement],
+      ['button6', null],
+    ];
+    for (const [name, action] of actions) {
+      this.bindPrefabButton(top.getChildByName(name), action);
+    }
+
+    const remain = top.getChildByName('remain');
+    this.prefabPackLabel = remain?.getChildByName('Label2')?.getComponent(Label) ?? null;
+    const bar = remain?.getChildByName('syUI');
+    const template = bar?.getChildByName('icon');
+    if (bar && template) {
+      for (let index = 0; index < 10; index += 1) {
+        const icon = index === 0 ? template : bar.children[index] ?? instantiate(template);
+        if (!icon.parent) bar.addChild(icon);
+        icon.setPosition(index * 62, 0, 0);
+        this.prefabInventoryIcons.push(icon);
+      }
+      for (const extra of bar.children.slice(10)) extra.active = false;
+    }
+    this.refreshPrefabInventory();
+    this.refreshLayout();
+  }
+
+  private refreshPrefabInventory(): void {
+    const remaining = this.pack ? countAvailableSlots(this.pack) : 0;
+    if (this.prefabPackLabel) this.prefabPackLabel.string = this.pack ? `${remaining}/10` : '--';
+    this.prefabInventoryIcons.forEach((icon, index) => { icon.active = index < remaining; });
+  }
+
+  /** Reuses the scene's Sprite artwork for the slogan, navigation and main action. */
+  public attachBottomPrefab(bottom: Node): void {
+    this.bottomPrefab = bottom;
+    this.footerRoot.active = false;
+    this.bottomTabRoot.active = false;
+    this.secondaryNodes = this.secondaryNodes.filter((node) =>
+      node !== this.footerRoot && node !== this.bottomTabRoot);
+    this.secondaryNodes.push(bottom);
+    this.collectSecondaryOpacity(bottom);
+
+    const buttons = bottom.getChildByName('buttons') ?? bottom.getChildByName('bottons');
+    const navigation: Array<[Node | null, () => void]> = [
+      [buttons?.getChildByName('Node') ?? null, this.activateSmokeTab],
+      [buttons?.getChildByName('Node2') ?? buttons?.getChildByName('Node-001') ?? null,
+        this.activateWorldTab],
+    ];
+    for (const [tab, handler] of navigation) {
+      this.bindPrefabButton(tab, () => handler.call(this));
+    }
+
+    const one = buttons?.getChildByName('one');
+    if (one) {
+      const icon = one.getChildByName('icon') ?? one.getChildByName('来一根');
+      if (icon) icon.active = false;
+      this.prefabStartLabel = one.getChildByName('Label')?.getComponent(Label) ?? null;
+      if (this.prefabStartLabel) {
+        const label = this.prefabStartLabel;
+        label.node.active = true;
+        this.prefabStartSweep = label.node.getComponent(TextSweep) ?? label.node.addComponent(TextSweep);
+      }
+      this.prefabStartButton = this.bindPrefabButton(one, () => this.activateMainButton());
+    }
+    this.refreshPrefabStart();
+    this.refreshLayout();
+  }
+
+  private refreshPrefabStart(): void {
+    if (!this.bottomPrefab) return;
+    const remaining = this.pack ? countAvailableSlots(this.pack) : 0;
+    if (this.prefabStartLabel) {
+      this.prefabStartLabel.string = !this.pack ? '烟盒不可用' : remaining > 0 ? '来一根' : '补一盒';
+    }
+    if (this.prefabStartButton) this.prefabStartButton.interactable = !!this.pack
+      && !this.lidAnimating && !this.entryMode;
+    this.refreshMainButtonText();
+  }
+
+  private activateMainButton(): void {
+    if (this.entryMode || this.lidAnimating || !this.pack) return;
+    if (countAvailableSlots(this.pack) === 0) {
+      this.onSupply?.();
+      return;
+    }
+    if (!this.pack.lidOpen) this.beginOpenLid(true);
+    else this.startDefaultSlot();
+  }
+
+  private activateRecords(): void {
+    if (this.entryMode || this.lidAnimating) return;
+    const snapshot = this.onReadCheckInStatus?.();
+    if (!snapshot || snapshot.cumulativeDays < 3) {
+      if (this.recordsHint) { this.recordsHint.removeFromParent(); this.recordsHint.destroy(); }
+      const hint = createRect('RecordsLockedHint', this.node, 460, 80, '#242321', 0, -100, 12);
+      this.recordsHint = hint;
+      createLabel('Label', hint, snapshot ? '打卡3天解锁' : '本机存档暂不可用', 26, '#e2d3be', 430, 68);
+      this.scheduleOnce(() => { if (hint.isValid) hint.destroy(); if (this.recordsHint === hint) this.recordsHint = null; }, 1.8);
+      return;
+    }
+    this.onRecords?.();
+  }
+
+  private activateLab(): void {
+    if (this.entryMode || this.lidAnimating) return;
+    const snapshot = this.onReadCheckInStatus?.();
+    if (!snapshot || snapshot.cumulativeDays < 2) {
+      if (this.recordsHint) { this.recordsHint.removeFromParent(); this.recordsHint.destroy(); }
+      const hint = createRect('LabLockedHint', this.node, 460, 80, '#242321', 0, -100, 12);
+      this.recordsHint = hint;
+      createLabel('Label', hint, snapshot ? '打卡2天解锁' : '本机存档暂不可用', 26, '#e2d3be', 430, 68);
+      this.scheduleOnce(() => { if (hint.isValid) hint.destroy(); if (this.recordsHint === hint) this.recordsHint = null; }, 1.8);
+      return;
+    }
+    this.onLab?.();
+  }
+
+  /** The authored side sprites replace the five generated side cards. */
+  public attachSidePrefab(side: Node): void {
+    this.sidePrefab = side;
+    for (const card of this.sideCards) card.node.active = false;
+    this.secondaryNodes = this.secondaryNodes.filter((node) =>
+      !this.sideCards.some((card) => card.node === node));
+    this.secondaryNodes.push(side);
+    this.collectSecondaryOpacity(side);
+
+    const record = side.getChildByName('record');
+    const lab = side.getChildByName('record2') ?? side.getChildByName('record-001');
+    const switchPack = side.getChildByName('record3') ?? side.getChildByName('record-002');
+    this.bindPrefabButton(record, () => this.activateRecords());
+    this.bindPrefabButton(lab, () => this.activateLab());
+    this.bindPrefabButton(switchPack);
+    const today = side.getChildByName('record4') ?? side.getChildByName('record-003');
+    this.prefabRecordLock = record?.getChildByName('suo') ?? null;
+    this.prefabLabLock = lab?.getChildByName('suo') ?? null;
+    this.prefabRecordHint = record?.getChildByName('Label')?.getComponent(Label) ?? null;
+    this.prefabLabHint = lab?.getChildByName('Label')?.getComponent(Label) ?? null;
+    this.prefabLastSmoke = today?.getChildByName('sec1')
+      ?.getChildByName('Label2')?.getComponent(Label) ?? null;
+    const todaySmokedRow = today?.getChildByName('sec2');
+    this.prefabTodaySmoked = todaySmokedRow?.getChildByName('Label2')?.getComponent(Label) ?? null;
+    if (this.prefabTodaySmoked) this.prefabTodaySmoked.node.active = true;
+    this.prefabStreak = today?.getChildByName('sec3')
+      ?.getChildByName('Label2')?.getComponent(Label) ?? null;
+    this.prefabCheckInState = today?.getChildByName('sec3')
+      ?.getChildByName('Label3')?.getComponent(Label) ?? null;
+    const checkInRow = today?.getChildByName('sec3');
+    checkInRow?.on(Node.EventType.TOUCH_END, () => {
+      if (this.checkInSnapshot && !this.checkInSnapshot.checkedToday) this.onCheckIn?.();
+    });
+    this.refreshPrefabSide();
+    this.refreshLayout();
+  }
+
+  private refreshPrefabSide(): void {
+    if (!this.sidePrefab) return;
+    const days = this.checkInSnapshot?.cumulativeDays ?? 0;
+    if (this.prefabRecordLock) this.prefabRecordLock.active = days < 3;
+    if (this.prefabLabLock) this.prefabLabLock.active = days < 2;
+    if (this.prefabRecordHint) this.prefabRecordHint.string = days < 3 ? '打卡3天解锁' : '查看全部';
+    if (this.prefabLabHint) this.prefabLabHint.string = days < 2 ? '打卡2天解锁' : '';
+    const smoking = this.homeSmokingStatus;
+    if (this.prefabLastSmoke) this.prefabLastSmoke.string = smoking === null ? '暂时不可用'
+      : smoking.lastCompletedAt === null
+        ? smoking.historyUnknown ? '历史时间不可用' : '暂无记录'
+        : this.formatLastSmokeTime(smoking.lastCompletedAt, Date.now());
+    if (this.prefabTodaySmoked) this.prefabTodaySmoked.string = smoking === null
+      || smoking.todaySmoked === null ? '--' : `${smoking.todaySmoked}支`;
+    if (this.prefabStreak) this.prefabStreak.string = this.checkInSnapshot === null
+      ? '--' : `${this.checkInSnapshot.streak}天`;
+    if (this.prefabCheckInState) this.prefabCheckInState.string = this.checkInSnapshot?.checkedToday
+      ? '已打卡' : '未打卡';
   }
 
   public refreshLayout(): void {
     if (!this.contentRoot) return;
     const visibleHeight = view.getVisibleSize().height;
+    // Canvas prefabs keep their authored transforms; this layout owns generated nodes only.
     this.refreshBackground(visibleHeight);
     const unit = this.cssPixelScale();
     const tabHeight = 57 * unit;
@@ -202,8 +472,15 @@ export class HomeController extends Component {
     this.workspaceRoot.setPosition(0, cursor - workbenchHeight / 2);
     const workspaceScale = workbenchHeight / 850;
     this.workspaceRoot.setScale(1, workspaceScale, 1);
+    this.packRoot.setScale(
+      HomeController.PACK_DISPLAY_WIDTH / HomeController.PACK_BOX_WIDTH,
+      HomeController.PACK_DISPLAY_HEIGHT / HomeController.PACK_BOX_HEIGHT / workspaceScale,
+      1);
+    this.packRoot.setPosition(HomeController.PACK_POSITION_X,
+      (HomeController.PACK_POSITION_Y - this.contentRoot.position.y
+        - this.workspaceRoot.position.y) / workspaceScale, 0);
     cursor -= workbenchHeight;
-    this.packNavigation.setPosition(-133, cursor - navHeight / 2);
+    this.packNavigation.setPosition(HomeController.PACK_POSITION_X, cursor - navHeight / 2);
     this.packNavigation.getComponent(UITransform)?.setContentSize(424, navHeight);
     cursor -= navHeight;
     this.footerRoot.setPosition(0, cursor - footerHeight / 2);
@@ -304,15 +581,16 @@ export class HomeController extends Component {
       Math.max(1, 424 - 2 * arrowSize), 15 * unitsPerCssPixel);
     this.startButtonLabel.fontSize = fontSize(0, this.pack === null ? 46 : 62);
     this.startButtonLabel.lineHeight = this.startButtonLabel.fontSize * 1.05;
-    this.startSweep.node.setScale(1, 1 / startScale, 1);
-    this.paintStartSweep();
+    this.startButtonLabel.node.setScale(1, 1 / startScale, 1);
+    this.refreshMainButtonText();
   }
 
   private layoutInventoryValue(unitsPerCssPixel: number): void {
     // CSS uses an unconstrained flex row. Measuring the actual number prevents
     // Label.Overflow.SHRINK from reducing 1/10 or 10/10 inside a 116-unit box.
     const number = this.packStatusLabel.string;
-    const ctx = this.startSweep.context;
+    if (!this.textMeasureContext) this.textMeasureContext = document.createElement('canvas').getContext('2d');
+    const ctx = this.textMeasureContext!;
     ctx.save();
     ctx.font = `560 ${this.packStatusLabel.fontSize}px "Arial Narrow", Arial, sans-serif`;
     const numberWidth = Math.ceil(ctx.measureText(number).width
@@ -435,6 +713,7 @@ export class HomeController extends Component {
 
   private layoutSideCards(workspaceScale: number,
     cssWidth: number, cssHeight: number, unitsPerCssPixel: number): void {
+    if (this.sidePrefab) return;
     const localPerCssY = unitsPerCssPixel / workspaceScale;
     const railHeight = 850 * 0.954;
     const railCssHeight = railHeight / localPerCssY;
@@ -566,6 +845,7 @@ export class HomeController extends Component {
       this.renderLid();
     }
     const remaining = pack ? countAvailableSlots(pack) : 0;
+    this.refreshPrefabInventory();
     this.inventoryCaptionLabel.string = pack ? '本盒剩余' : '烟盒状态';
     this.packStatusLabel.string = pack ? `${remaining}/10` : '--';
     this.layoutInventoryValue(this.cssPixelScale());
@@ -576,12 +856,13 @@ export class HomeController extends Component {
       segment.empty.node.active = index >= remaining;
     }
     this.startButton.interactable = !!pack && !this.lidAnimating;
+    this.refreshPrefabStart();
     this.startButtonLabel.string = pack === null ? '烟盒不可用' : remaining > 0 ? '来一根' : '补一盒';
     const cssWidth = screen.windowSize.width / (screen.devicePixelRatio || 1);
     this.startButtonLabel.fontSize = (pack === null ? 46 : 62)
       * cssWidth / 750 * this.cssPixelScale();
     this.startButtonLabel.lineHeight = this.startButtonLabel.fontSize * 1.05;
-    this.paintStartSweep();
+    this.refreshMainButtonText();
     this.refreshSlotVisibility();
   }
 
@@ -597,6 +878,7 @@ export class HomeController extends Component {
 
   public setCheckInSnapshot(snapshot: CheckInSnapshot | null): void {
     this.checkInSnapshot = snapshot;
+    this.refreshPrefabSide();
     if (this.smokedCountLabel) {
       this.smokedCountLabel.string = snapshot?.cumulativeDays >= 3
         ? '查看全部' : '打卡3天解锁';
@@ -626,6 +908,7 @@ export class HomeController extends Component {
 
   public setHomeSmokingStatus(status: HomeSmokingStatus | null): void {
     this.homeSmokingStatus = status;
+    this.refreshPrefabSide();
     if (this.statusValues.length < 3) return;
     const now = Date.now();
     this.statusValues[0].string = status === null ? '暂时不可用'
@@ -667,6 +950,8 @@ export class HomeController extends Component {
     this.lidAnimating = true;
     this.extractAfterOpen = extractAfterOpen;
     this.startButton.interactable = false;
+    if (this.prefabStartButton) this.prefabStartButton.interactable = false;
+    this.refreshMainButtonText();
   }
 
   private updateLid(deltaTime: number): void {
@@ -676,6 +961,8 @@ export class HomeController extends Component {
     if (this.lidProgress < 1) return;
     this.lidAnimating = false;
     this.startButton.interactable = !!this.pack;
+    this.refreshPrefabStart();
+    this.refreshMainButtonText();
     const shouldExtract = this.extractAfterOpen;
     this.extractAfterOpen = false;
     if (shouldExtract) this.startDefaultSlot();
@@ -703,6 +990,8 @@ export class HomeController extends Component {
 
   public setEntryMode(active: boolean): void {
     this.entryMode = active;
+    this.refreshPrefabStart();
+    this.refreshMainButtonText();
     if (!active) this.setSecondaryOpacity(1);
   }
 
@@ -920,17 +1209,11 @@ export class HomeController extends Component {
     });
     this.startButtonLabel = createLabel('Label', startRoot, '来一根', 62,
       '#ffe0a2', 620, 96);
-    // Keep one string owner, but render base text and sweep into one Canvas so
-    // font metrics cannot drift and create a visible doubled glyph.
-    this.startButtonLabel.node.active = false;
-    this.startSweep = new CanvasTexture('StartLabelSweep', startRoot, 620, 96);
+    this.startButtonLabel.isBold = true;
+    this.startTextSweep = this.startButtonLabel.node.addComponent(TextSweep);
     this.buildStartArrows(startRoot);
     this.buildStartBolts(startRoot);
-    startRoot.on(Button.EventType.CLICK, () => {
-      if (this.entryMode || this.lidAnimating || !this.pack) return;
-      if (!this.pack.lidOpen) this.beginOpenLid(true);
-      else this.startDefaultSlot();
-    });
+    startRoot.on(Button.EventType.CLICK, () => this.activateMainButton());
     this.secondaryNodes = [this.headerRoot, this.quickRoot, this.noticeRoot, this.footerRoot, this.bottomTabRoot,
       this.packNavigation, ...this.workspaceRoot.children.filter((child) => child !== this.packRoot)];
     for (const node of this.secondaryNodes) this.collectSecondaryOpacity(node);
@@ -960,6 +1243,7 @@ export class HomeController extends Component {
   }
 
   private refreshBottomTabLayout(unit: number): void {
+    if (this.bottomPrefab) return;
     if (!this.bottomTabRoot || Math.abs(this.bottomTabUnit - unit) < 0.001) return;
     this.bottomTabUnit = unit;
     const height = 57 * unit;
@@ -1038,56 +1322,12 @@ export class HomeController extends Component {
     graphics.stroke();
   }
 
-  /** Confirmed visual target: 108° gold band moving from left to right. */
-  private paintStartSweep(): void {
-    if (!this.startSweep || !this.startButtonLabel) return;
-    const label = this.startButtonLabel.string;
-    const phase = this.sweepElapsed / 2.8;
-    this.startSweep.redraw((ctx) => {
-      ctx.save();
-      // CanvasTexture already flips Y into Cocos coordinates; flip text back upright.
-      ctx.scale(1, -1);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const fontSize = this.startButtonLabel.fontSize;
-      ctx.font = `780 ${fontSize}px "PingFang SC", "Microsoft YaHei UI", sans-serif`;
-      const spacing = fontSize * 0.11;
-      const characters = Array.from(label);
-      const widths = characters.map((character) => ctx.measureText(character).width);
-      const totalWidth = widths.reduce((sum, width) => sum + width, 0)
-        + Math.max(0, characters.length - 1) * spacing;
-      const drawText = (): void => {
-        let cursor = -totalWidth / 2;
-        characters.forEach((character, index) => {
-          const width = widths[index];
-          ctx.fillText(character, cursor + width / 2, 0);
-          cursor += width + spacing;
-        });
-      };
-      ctx.shadowColor = 'rgba(255,172,52,0.28)';
-      ctx.shadowBlur = 26;
-      ctx.fillStyle = '#ffe0a2';
-      drawText();
-      ctx.shadowColor = 'rgba(255,216,112,0.50)';
-      ctx.shadowBlur = 12;
-      drawText();
-      ctx.shadowColor = 'rgba(0,0,0,0)';
-      ctx.shadowBlur = 0;
-      if (this.pack) {
-        const center = -360 + 720 * phase;
-        const gradient = ctx.createLinearGradient(center - 112, 20, center + 112, -20);
-        gradient.addColorStop(0, 'rgba(255,251,228,0)');
-        gradient.addColorStop(0.38, 'rgba(255,251,228,0)');
-        gradient.addColorStop(0.46, '#fffbe4');
-        gradient.addColorStop(0.51, '#fff2b2');
-        gradient.addColorStop(0.55, '#ffd766');
-        gradient.addColorStop(0.63, 'rgba(255,215,102,0)');
-        gradient.addColorStop(1, 'rgba(255,215,102,0)');
-        ctx.fillStyle = gradient;
-        drawText();
-      }
-      ctx.restore();
-    });
+  private refreshMainButtonText(): void {
+    const playing = !!this.pack && !this.entryMode && !this.lidAnimating;
+    for (const effect of [this.startTextSweep, this.prefabStartSweep]) {
+      effect?.setPlaying(playing);
+      effect?.refresh();
+    }
   }
 
   private buildStartArrows(parent: Node): void {
@@ -1134,17 +1374,19 @@ export class HomeController extends Component {
   }
 
   private buildPack(): void {
-    const boxWidth = 330;
-    const boxHeight = 600;
+    const boxWidth = HomeController.PACK_BOX_WIDTH;
+    const boxHeight = HomeController.PACK_BOX_HEIGHT;
     // Keep the hit box on the visible 0.06–0.96 pack range; the 600-unit
     // construction box otherwise overlaps the 44px switch-pack control below.
-    const packRoot = createNode('PackRoot', this.workspaceRoot, boxWidth, boxHeight * 0.92, -133, 0);
+    const packRoot = createNode('PackRoot', this.workspaceRoot, boxWidth, boxHeight * 0.92,
+      HomeController.PACK_POSITION_X, HomeController.PACK_POSITION_Y);
     this.packRoot = packRoot;
     packRoot.on(Node.EventType.TOUCH_END, () => this.beginOpenLid(false));
     // Legacy pack-box is 86% of the 61.5% left column, then the active pack is
     // enlarged by 1.06. That yields about 387/690 rendered width. Its 48vh
     // workbench also makes the opened pack noticeably taller than the first pass.
-    packRoot.setScale(1.17, 1.5, 1);
+    packRoot.setScale(HomeController.PACK_DISPLAY_WIDTH / boxWidth,
+      HomeController.PACK_DISPLAY_HEIGHT / boxHeight, 1);
     const yFromTop = (fraction: number): number => boxHeight * (0.5 - fraction);
     const bodyWidth = boxWidth * 0.84;
     const bodyX = boxWidth * (0.13 + 0.84 / 2 - 0.5);
@@ -1535,6 +1777,7 @@ export class HomeController extends Component {
     const node = createNode('Settings', parent, 88, 88, 301, 0);
     this.settingsRoot = node;
     node.addComponent(Button).transition = Button.Transition.NONE;
+    node.on(Button.EventType.CLICK, () => this.onSettings?.());
     const graphic = node.addComponent(Graphics);
     graphic.strokeColor = color('#c6b69f');
     graphic.fillColor = color('#c6b69f');
@@ -1653,7 +1896,8 @@ export class HomeController extends Component {
   }
 
   private buildPackNavigation(): void {
-    const navigation = createNode('PackSwitchNavigation', this.contentRoot, 424, 88, -133, 0);
+    const navigation = createNode('PackSwitchNavigation', this.contentRoot, 424, 88,
+      HomeController.PACK_POSITION_X, 0);
     this.packNavigation = navigation;
     const drawArrow = (name: string, x: number, previous: boolean): void => {
       const arrow = createNode(name, navigation, 88, 88, x);
@@ -1681,6 +1925,8 @@ export class HomeController extends Component {
     const cardWidth = 248;
     const card = createNode(title, this.workspaceRoot, cardWidth, height, x, y);
     if (iconKind !== 'today') card.addComponent(Button).transition = Button.Transition.NONE;
+    if (iconKind === 'records') UIButton.bind(card, () => this.activateRecords());
+    if (iconKind === 'lab') UIButton.bind(card, () => this.activateLab());
     const frame = card.addComponent(Graphics);
     this.paintInfoCardFrame(frame, height, iconKind === 'gift');
     const todayHeaderY = height / 2 - 46;

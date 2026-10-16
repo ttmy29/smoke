@@ -1,6 +1,8 @@
 import { _decorator, BlockInputEvents, Component, Graphics, Mask, Node,
   UIOpacity, view } from 'cc';
 import { DemoAudio } from '../audio/DemoAudio';
+import * as InitialSettings from '../config/InitialSettings';
+import { debugLog } from '../services/DebugLog';
 import { alignWidget, createLabel, createNode, createRect,
   DESIGN_HEIGHT, DESIGN_WIDTH } from '../common/UiFactory';
 import { SessionModel, SessionSnapshot } from '../domain/SessionModel';
@@ -13,6 +15,12 @@ import { CanvasTexture } from '../session/effects/CanvasTexture';
 import { CigaretteView } from '../session/view/CigaretteView';
 import { SupplyController } from '../supply/SupplyController';
 import { CheckInController } from '../checkin/CheckInController';
+import { RecordsController } from '../records/RecordsController';
+import { SmokeLabController } from '../lab/SmokeLabController';
+import { SmokeLabStore, SMOKE_LAB_STORAGE_KEY } from '../persistence/SmokeLabStore';
+import { createLocalRecordsSource } from '../records/RecordsModel';
+import { createBrowserSmokingRecordStore, SmokingRecordStore,
+  SMOKING_RECORD_STORAGE_KEY } from '../persistence/SmokingRecordStore';
 import { CHECK_IN_STORAGE_KEY, CheckInStore, createBrowserCheckInStore } from '../persistence/CheckInStore';
 import { createBrowserTicketRefillStore, TICKET_REFILL_PENDING_KEY, TicketRefillResult,
   TicketRefillStore } from '../persistence/TicketRefillStore';
@@ -22,16 +30,17 @@ import { createBrowserQuitStore, QUIT_STORAGE_KEY, QuitStore } from '../persiste
 import { ReceiveRankingController } from '../ranking/ReceiveRankingController';
 import { emptyReceiveRankingSource } from '../ranking/ReceiveRankingModel';
 import { AchievementController } from '../achievement/AchievementController';
-import { ACHIEVEMENT_GROUPS, SPECIAL_ACHIEVEMENT } from '../achievement/AchievementCatalog';
+import { SettingsController } from '../settings/SettingsController';
+import { DesktopGuide } from '../common/DesktopGuide';
+import { emptyWorldSource, WorldController } from '../world/WorldController';
+import { WorldShopController } from '../world/WorldShopController';
+import { ACHIEVEMENT_GROUPS, AchievementItem, SPECIAL_ACHIEVEMENT } from '../achievement/AchievementCatalog';
 import { createAchievementIcon } from '../achievement/AchievementIcon';
 import { ACHIEVEMENT_STORAGE_KEY, AchievementStore,
   createBrowserAchievementStore } from '../persistence/AchievementStore';
 
 const { ccclass } = _decorator;
 
-// 开发测试开关：true = 每次进入游戏都初始化本项目存档；false = 保留存档。
-// 验证完初始状态后改回 false，否则每次刷新都会重新开始。
-const RESET_LOCAL_SAVE_ON_START = false;
 const LOCAL_SAVE_KEYS = [
   'smoke.pack.wang-xi.v1',
   'smoke.pack.wang-xi.v2',
@@ -41,6 +50,8 @@ const LOCAL_SAVE_KEYS = [
   TICKET_REFILL_PENDING_KEY,
   QUIT_STORAGE_KEY,
   ACHIEVEMENT_STORAGE_KEY,
+  SMOKING_RECORD_STORAGE_KEY,
+  SMOKE_LAB_STORAGE_KEY,
 ];
 
 @ccclass('DemoFlow')
@@ -50,21 +61,41 @@ export class DemoFlow extends Component {
   private resultPanel!: Node;
   private supplyPanel!: Node;
   private checkInPanel!: Node;
+  private recordsPanel!: Node;
+  private labPanel!: Node;
   private quitPanel!: Node;
   private rankingPanel!: Node;
   private achievementPanel!: Node;
+  private settingsPanel!: Node;
+  private worldPanel!: Node;
+  private worldShopPanel!: Node;
   private transitionLayer!: Node;
   private sessionController!: SessionController;
   private resultController!: ResultController;
   private supplyController!: SupplyController;
   private checkInController!: CheckInController;
+  private recordsController!: RecordsController;
+  private labController!: SmokeLabController;
+  private labStore!: SmokeLabStore;
+  private labFromSession = false;
+  private recordsChild: 'checkin' | 'quit' | null = null;
   private quitController!: QuitController;
   private rankingController!: ReceiveRankingController;
   private achievementController!: AchievementController;
+  private settingsController!: SettingsController;
+  private settingsReturnToCheckIn = false;
+  private worldController!: WorldController;
+  private worldShopController!: WorldShopController;
+  private desktopGuide!: DesktopGuide;
   private homeController!: HomeController;
+  private pendingTopPrefab: Node | null = null;
+  private pendingBottomPrefab: Node | null = null;
+  private bottomPrefabForWorld: Node | null = null;
+  private pendingSidePrefab: Node | null = null;
   private progressStore!: ProgressStore;
   private packStore!: PackStore;
   private checkInStore!: CheckInStore;
+  private smokingRecordStore!: SmokingRecordStore;
   private quitStore!: QuitStore;
   private achievementStore!: AchievementStore;
   private achievementNotice: Node | null = null;
@@ -93,6 +124,23 @@ export class DemoFlow extends Component {
   private static readonly ENTRY_DURATION = 1.35;
   private static readonly PACK_FADE = 0.48;
   private static readonly SECONDARY_FADE = 0.18;
+
+  public attachTopPrefab(top: Node): void {
+    if (this.homeController) this.homeController.attachTopPrefab(top);
+    else this.pendingTopPrefab = top;
+  }
+
+  public attachBottomPrefab(bottom: Node): void {
+    this.bottomPrefabForWorld = bottom;
+    if (this.homeController) this.homeController.attachBottomPrefab(bottom);
+    else this.pendingBottomPrefab = bottom;
+    this.worldController?.attachBottomNavigation(bottom);
+  }
+
+  public attachSidePrefab(side: Node): void {
+    if (this.homeController) this.homeController.attachSidePrefab(side);
+    else this.pendingSidePrefab = side;
+  }
 
   protected update(deltaTime: number): void {
     this.updateAchievementNotice(deltaTime);
@@ -135,8 +183,33 @@ export class DemoFlow extends Component {
     if (progress >= 1 && packFade >= 1) this.showSession();
   }
 
+  private initializePreviewData(): void {
+    const now = Date.now();
+    const results = [
+      ['打卡', this.checkInStore.initializePreview({
+        cumulativeDays: InitialSettings.INITIAL_CHECK_IN_DAYS,
+        streak: InitialSettings.INITIAL_CHECK_IN_STREAK_DAYS,
+        ticketBalance: InitialSettings.INITIAL_TICKET_BALANCE,
+        checkedToday: InitialSettings.INITIAL_CHECKED_IN_TODAY,
+      }, now)],
+      ['烟盒', this.packStore.initializePreview({
+        packId: InitialSettings.INITIAL_PACK_ID,
+        remaining: InitialSettings.INITIAL_PACK_REMAINING,
+        lidOpen: InitialSettings.INITIAL_PACK_LID_OPEN,
+      })],
+      ['抽烟累计', this.progressStore.initializePreview(InitialSettings.INITIAL_SMOKED_CIGARETTES, now)],
+    ] as const;
+    for (const [name, success] of results) {
+      if (!success) console.warn(`[InitialSettings] ${name}初始化失败，请检查参数、空存档及存储可用性。`);
+    }
+    if (InitialSettings.INITIAL_QUIT_DAYS !== 0) {
+      console.warn('[InitialSettings] INITIAL_QUIT_DAYS 仅为预留参数，逐日戒烟记录初始化尚未接入。');
+    }
+    debugLog('初始存档配置已处理', results);
+  }
+
   protected onLoad(): void {
-    if (RESET_LOCAL_SAVE_ON_START) {
+    if (InitialSettings.RESET_LOCAL_SAVE_ON_START) {
       try {
         for (const key of LOCAL_SAVE_KEYS) window.localStorage.removeItem(key);
       } catch (error) {
@@ -146,6 +219,14 @@ export class DemoFlow extends Component {
     this.progressStore = createBrowserProgressStore();
     this.packStore = createBrowserPackStore();
     this.checkInStore = createBrowserCheckInStore();
+    let labStorage = null;
+    try { labStorage = window.localStorage; } catch { /* Store reports unavailable. */ }
+    this.labStore = new SmokeLabStore(labStorage, () => {
+      const pack = this.packStore.readPack();
+      return pack ? { boxId: pack.instanceId, typeId: pack.packId, packName: '王溪', sequence: pack.sequence } : null;
+    }, () => this.checkInStore.readSnapshot()?.cumulativeDays ?? null);
+    this.smokingRecordStore = createBrowserSmokingRecordStore();
+    if (InitialSettings.RESET_LOCAL_SAVE_ON_START) this.initializePreviewData();
     this.quitStore = createBrowserQuitStore();
     this.achievementStore = createBrowserAchievementStore();
     this.ticketRefillStore = createBrowserTicketRefillStore(this.checkInStore, this.packStore);
@@ -153,19 +234,31 @@ export class DemoFlow extends Component {
     const audioNode = new Node('AudioRoot');
     this.node.addChild(audioNode);
     const audio = audioNode.addComponent(DemoAudio);
+    if (!audio.initializeDefaults(InitialSettings.DEFAULT_SOUND_ENABLED, InitialSettings.DEFAULT_SOUND_VOLUME)) {
+      console.warn('[InitialSettings] 音效配置无效，音量应为 0～1，音效开关应为布尔值。');
+    }
+    debugLog('应用初始化', { reset: InitialSettings.RESET_LOCAL_SAVE_ON_START,
+      adPreview: InitialSettings.ENABLE_AD_PREVIEW, soundEnabled: !audio.isMuted });
 
-    this.homePanel = createNode('HomePanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    // Home artwork stays directly under Canvas, between its background and page overlays.
+    this.homePanel = createNode('HomePanel', this.node.parent ?? this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.homePanel.setSiblingIndex(0);
     this.sessionPanel = createNode('SessionPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.resultPanel = createNode('ResultPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.supplyPanel = createNode('SupplyPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.recordsPanel = createNode('RecordsPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.labPanel = createNode('SmokeLabPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.checkInPanel = createNode('CheckInPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.quitPanel = createNode('QuitPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.rankingPanel = createNode('RankingPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.achievementPanel = createNode('AchievementPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.settingsPanel = createNode('SettingsPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.worldPanel = createNode('WorldPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.worldShopPanel = createNode('WorldShopPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.transitionLayer = createNode('TransitionLayer', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     for (const panel of [this.homePanel, this.sessionPanel, this.resultPanel,
-      this.supplyPanel, this.checkInPanel, this.quitPanel, this.rankingPanel,
-      this.achievementPanel,
+      this.supplyPanel, this.recordsPanel, this.labPanel, this.checkInPanel, this.quitPanel, this.rankingPanel,
+      this.achievementPanel, this.settingsPanel, this.worldPanel, this.worldShopPanel,
       this.transitionLayer]) {
       alignWidget(panel, { left: 0, right: 0, top: 0, bottom: 0 });
     }
@@ -175,9 +268,30 @@ export class DemoFlow extends Component {
       () => this.showSupply(), (instanceId) => this.packStore.openLid(instanceId),
       () => this.progressStore.readHomeSmokingStatus(), () => this.showCheckIn(),
       () => this.checkInStore.readSnapshot(), () => this.showQuit(),
-      () => this.showRanking(), () => this.showAchievement());
+      () => this.showRanking(), () => this.showAchievement(), () => this.showSettings(),
+      () => this.showDesktopGuide(), () => this.showRecords(), () => this.showLab());
+    if (this.pendingTopPrefab) {
+      this.homeController.attachTopPrefab(this.pendingTopPrefab);
+      this.pendingTopPrefab = null;
+    }
+    if (this.pendingBottomPrefab) {
+      this.homeController.attachBottomPrefab(this.pendingBottomPrefab);
+      this.pendingBottomPrefab = null;
+    }
+    if (this.pendingSidePrefab) {
+      this.homeController.attachSidePrefab(this.pendingSidePrefab);
+      this.pendingSidePrefab = null;
+    }
     this.sessionController = this.sessionPanel.addComponent(SessionController);
     this.sessionController.initialize(audio, (snapshot) => this.showResult(snapshot));
+    this.sessionController.configureLab(() => this.labStore.runtime(), () => this.showLab(true));
+    this.labController = this.labPanel.addComponent(SmokeLabController);
+    this.labController.initialize(this.labStore, () => {
+      const resumeSession = this.labFromSession;
+      this.labController.dismiss(); this.labFromSession = false;
+      if (resumeSession) { this.sessionPanel.active = true; this.sessionController.resumeFromLab(); }
+      else this.showHome();
+    });
     this.resultController = this.resultPanel.addComponent(ResultController);
     this.resultController.initialize(() => this.startExtraction(this.homeController.defaultSlot()),
       () => this.showHome(), () => this.showSupply());
@@ -187,17 +301,71 @@ export class DemoFlow extends Component {
       () => this.checkInStore.readSnapshot()?.ticketBalance ?? null,
       () => this.ticketRefillStore.hasPending());
     this.checkInController = this.checkInPanel.addComponent(CheckInController);
-    this.checkInController.initialize(this.checkInStore, () => this.showHome(), () => {
+    this.checkInController.initialize(this.checkInStore, () => this.closeRecordsChild('checkin'), () => {
       this.homeController.setCheckInSnapshot(this.checkInStore.readSnapshot());
       this.syncAchievementProgress();
       this.homeController.setAchievementUnread(this.achievementStore.hasUnread());
+    }, undefined, () => {
+      this.showSettings();
+      this.settingsReturnToCheckIn = true;
     });
     this.quitController = this.quitPanel.addComponent(QuitController);
-    this.quitController.initialize(this.quitStore, () => this.showHome());
+    this.quitController.initialize(this.quitStore, () => this.closeRecordsChild('quit'));
+    this.recordsController = this.recordsPanel.addComponent(RecordsController);
+    this.recordsController.initialize(createLocalRecordsSource({ progress: this.progressStore,
+      checkin: this.checkInStore, smoking: this.smokingRecordStore, quit: this.quitStore,
+      completedPacks: () => this.achievementStore.readQualifiedMetrics()?.qualifiedPublicSettlements ?? null,
+    }), this.quitStore, {
+      onBack: () => this.showHome(),
+      onCheckIn: () => { this.recordsChild = 'checkin'; this.showCheckIn(); },
+      onQuit: (price) => { this.recordsChild = 'quit'; this.showQuit(price); },
+    });
     this.rankingController = this.rankingPanel.addComponent(ReceiveRankingController);
     this.rankingController.initialize(emptyReceiveRankingSource, () => this.showHome());
     this.achievementController = this.achievementPanel.addComponent(AchievementController);
     this.achievementController.initialize(this.achievementStore, () => this.showHome());
+    this.settingsController = this.settingsPanel.addComponent(SettingsController);
+    this.settingsController.initialize({
+      soundEnabled: () => !audio.isMuted,
+      toggleSound: () => { audio.toggleMuted(); },
+      openDesktopGuide: () => this.showDesktopGuide(),
+      localBytes: () => {
+        try {
+          return LOCAL_SAVE_KEYS.reduce((bytes, key) => {
+            const value = window.localStorage.getItem(key);
+            return bytes + (value === null ? 0 : (key.length + value.length) * 2);
+          }, 0);
+        } catch { return null; }
+      },
+    }, () => {
+      if (this.settingsReturnToCheckIn) {
+        this.settingsReturnToCheckIn = false;
+        this.settingsController.dismiss();
+        this.showCheckIn();
+      } else this.showHome();
+    });
+    this.worldController = this.worldPanel.addComponent(WorldController);
+    this.worldController.initialize({
+      onHome: () => this.showHome(),
+      onShop: () => this.showWorldShop(),
+    }, emptyWorldSource);
+    this.worldShopController = this.worldShopPanel.addComponent(WorldShopController);
+    this.worldShopController.initialize({
+      onBack: () => {
+        this.worldShopController.dismiss();
+        this.worldPanel.active = true;
+      },
+      readTickets: () => this.checkInStore.readSnapshot()?.ticketBalance ?? null,
+    });
+    if (this.bottomPrefabForWorld) this.worldController.attachBottomNavigation(this.bottomPrefabForWorld);
+    this.homeController.setBottomNavigationHandlers({
+      onSmokeTab: () => { if (!this.homePanel.active) this.showHome(); },
+      onWorldTab: () => this.showWorld(),
+    });
+    const guideLayer = createNode('DesktopGuideOverlay', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    alignWidget(guideLayer, { left: 0, right: 0, top: 0, bottom: 0 });
+    this.desktopGuide = guideLayer.addComponent(DesktopGuide);
+    this.desktopGuide.initialize();
     this.achievementStore.subscribe(() => {
       this.homeController.setAchievementUnread(this.achievementStore.hasUnread());
     });
@@ -206,11 +374,20 @@ export class DemoFlow extends Component {
   }
 
   private showHome(): void {
+    this.labController?.dismiss();
+    this.labFromSession = false;
+    this.recordsChild = null;
+    this.recordsController?.dismiss();
+    this.settingsReturnToCheckIn = false;
+    this.worldShopController?.dismiss();
+    this.worldController?.dismiss();
+    this.desktopGuide?.dismiss();
     this.supplyController?.dismiss();
     this.checkInController?.dismiss();
     this.quitController?.dismiss();
     this.rankingController?.dismiss();
     this.achievementController?.dismiss();
+    this.settingsController?.dismiss();
     this.extracting = false;
     this.entrySource = null;
     this.activeSessionId = null;
@@ -233,10 +410,45 @@ export class DemoFlow extends Component {
     this.resultPanel.active = false;
     this.supplyPanel.active = false;
     this.checkInPanel.active = false;
+    this.recordsPanel.active = false;
     this.quitPanel.active = false;
     this.rankingPanel.active = false;
     this.achievementPanel.active = false;
+    this.settingsPanel.active = false;
+    this.worldPanel.active = false;
+    this.worldShopPanel.active = false;
     this.transitionLayer.active = false;
+  }
+
+  private showRecords(): void {
+    if (this.extracting || this.recordsPanel.active
+      || (this.checkInStore.readSnapshot()?.cumulativeDays ?? 0) < 3) return;
+    this.recordsChild = null;
+    this.recordsController.present();
+    this.homePanel.active = true;
+    this.sessionPanel.active = this.resultPanel.active = this.supplyPanel.active = false;
+    this.checkInPanel.active = this.quitPanel.active = this.rankingPanel.active = false;
+    this.achievementPanel.active = this.settingsPanel.active = this.worldPanel.active = false;
+    this.worldShopPanel.active = this.transitionLayer.active = false;
+  }
+
+  private showLab(fromSession = false): void {
+    if (this.extracting || this.labPanel.active || (this.checkInStore.readSnapshot()?.cumulativeDays ?? 0) < 2) return;
+    this.labFromSession = fromSession;
+    if (fromSession) this.sessionController.pauseForLab();
+    this.sessionPanel.active = false;
+    this.labController.present();
+    // Extraction raises the session panel; the lab must cover it when entered mid-session.
+    this.labPanel.setSiblingIndex(this.node.children.length - 1);
+  }
+
+  private closeRecordsChild(child: 'checkin' | 'quit'): void {
+    if (this.recordsChild !== child) { this.showHome(); return; }
+    this.recordsChild = null;
+    if (child === 'checkin') { this.checkInController.dismiss(); this.checkInPanel.active = false; }
+    else { this.quitController.dismiss(); this.quitPanel.active = false; }
+    this.homeController.setCheckInSnapshot(this.checkInStore.readSnapshot());
+    this.recordsController.resume();
   }
 
   private showCheckIn(): void {
@@ -252,9 +464,9 @@ export class DemoFlow extends Component {
     this.checkInPanel.active = true;
   }
 
-  private showQuit(): void {
+  private showQuit(price = false): void {
     if (this.extracting || this.quitPanel.active) return;
-    this.quitController.present();
+    if (price) this.quitController.presentPrice(); else this.quitController.present();
     this.homePanel.active = true;
     this.sessionPanel.active = false;
     this.resultPanel.active = false;
@@ -290,6 +502,49 @@ export class DemoFlow extends Component {
     this.rankingPanel.active = false;
     this.transitionLayer.active = false;
     this.achievementPanel.active = true;
+  }
+
+  private showSettings(): void {
+    if (this.extracting || this.settingsPanel.active) return;
+    this.settingsReturnToCheckIn = false;
+    this.settingsController.present();
+    this.homePanel.active = true;
+    this.sessionPanel.active = false;
+    this.resultPanel.active = false;
+    this.supplyPanel.active = false;
+    this.checkInPanel.active = false;
+    this.quitPanel.active = false;
+    this.rankingPanel.active = false;
+    this.achievementPanel.active = false;
+    this.transitionLayer.active = false;
+  }
+
+  private showDesktopGuide(): void {
+    if (this.extracting) return;
+    this.desktopGuide.present();
+  }
+
+  private showWorld(): void {
+    if (this.extracting || this.worldPanel.active) return;
+    this.desktopGuide?.dismiss();
+    this.worldController.present();
+    this.homePanel.active = false;
+    this.sessionPanel.active = false;
+    this.resultPanel.active = false;
+    this.supplyPanel.active = false;
+    this.checkInPanel.active = false;
+    this.quitPanel.active = false;
+    this.rankingPanel.active = false;
+    this.achievementPanel.active = false;
+    this.settingsPanel.active = false;
+    this.transitionLayer.active = false;
+  }
+
+  private showWorldShop(): void {
+    if (this.extracting || this.worldShopPanel.active) return;
+    // Keep the world page alive underneath the push, preserving its scroll position.
+    this.worldPanel.active = true;
+    this.worldShopController.present();
   }
 
   private syncAchievementProgress(): void {
@@ -342,6 +597,12 @@ export class DemoFlow extends Component {
 
   private updateAchievementNotice(dt: number): void {
     if (!this.achievementStore) return;
+    const blocked = (this.checkInPanel?.active && this.checkInController?.isUnlockOpen)
+      || (this.recordsPanel?.active && this.recordsController?.modalOpen)
+      || this.labPanel?.active;
+    if (this.achievementNotice) this.achievementNotice.active = !blocked;
+    // V1.0.8 defers achievement notices until the check-in unlock modal closes.
+    if (blocked) return;
     const elapsed = Math.min(Math.max(dt, 0), 0.1);
     if (this.noticePhase === 'idle') {
       if (this.extracting || this.sessionPanel?.active) return;
@@ -385,7 +646,8 @@ export class DemoFlow extends Component {
   }
 
   private startAchievementNotice(id: string): void {
-    const item = [...ACHIEVEMENT_GROUPS.flatMap((group) => group.items),
+    const item = [...ACHIEVEMENT_GROUPS.reduce<AchievementItem[]>((items, group) =>
+      items.concat(group.items), []),
       SPECIAL_ACHIEVEMENT].find((entry) => entry.id === id);
     if (!item) { this.achievementStore.markNoticeShown(id); return; }
     const panel = createRect('AchievementNotice', this.node, 400, 108,
@@ -537,6 +799,10 @@ export class DemoFlow extends Component {
   }
 
   private showResult(snapshot: Readonly<SessionSnapshot>): void {
+    if (this.activeSessionId && this.activeSlotIndex !== null
+      && !this.smokingRecordStore.recordSession(this.activeSessionId, this.activeSlotIndex, snapshot)) {
+      console.warn('Failed to save smoking record details');
+    }
     if (snapshot.inhaleCount > 0 && this.activeSessionId
       && this.activePackInstanceId && this.activeSlotIndex !== null) {
       this.achievementStore.recordQualifiedSession(this.activeSessionId,
@@ -554,6 +820,11 @@ export class DemoFlow extends Component {
     this.resultController.present(snapshot, smokedCount, this.packStore.readPack());
     this.resultPanel.active = true;
     this.supplyPanel.active = false;
+  }
+
+  protected onDestroy(): void {
+    this.clearTransition();
+    this.homePanel?.destroy();
   }
 
   private clearTransition(): void {
