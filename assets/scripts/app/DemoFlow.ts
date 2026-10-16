@@ -34,6 +34,12 @@ import { SettingsController } from '../settings/SettingsController';
 import { DesktopGuide } from '../common/DesktopGuide';
 import { emptyWorldSource, WorldController } from '../world/WorldController';
 import { WorldShopController } from '../world/WorldShopController';
+import { PackSelectController } from '../packs/PackSelectController';
+import { PackLockedController } from '../packs/PackLockedController';
+import { PackActionOrigin } from '../packs/PackLockedAction';
+import { LooseBoxController } from '../packs/LooseBoxController';
+import { emptyLooseBoxSource, readLooseBox } from '../packs/LooseBoxModel';
+import { createPackUnlockProgressReader } from '../packs/PackUnlockProgress';
 import { ACHIEVEMENT_GROUPS, AchievementItem, SPECIAL_ACHIEVEMENT } from '../achievement/AchievementCatalog';
 import { createAchievementIcon } from '../achievement/AchievementIcon';
 import { ACHIEVEMENT_STORAGE_KEY, AchievementStore,
@@ -69,6 +75,13 @@ export class DemoFlow extends Component {
   private settingsPanel!: Node;
   private worldPanel!: Node;
   private worldShopPanel!: Node;
+  private packSelectPanel!: Node;
+  private packSelectController!: PackSelectController;
+  private looseBoxPanel!: Node;
+  private looseBoxController!: LooseBoxController;
+  private rankingFromLooseBox = false;
+  private packLockedController!: PackLockedController;
+  private packCheckInOrigin: PackActionOrigin | null = null;
   private transitionLayer!: Node;
   private sessionController!: SessionController;
   private resultController!: ResultController;
@@ -255,10 +268,12 @@ export class DemoFlow extends Component {
     this.settingsPanel = createNode('SettingsPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.worldPanel = createNode('WorldPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.worldShopPanel = createNode('WorldShopPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.packSelectPanel = createNode('PackSelectPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    this.looseBoxPanel = createNode('LooseBoxPanel', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.transitionLayer = createNode('TransitionLayer', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
     for (const panel of [this.homePanel, this.sessionPanel, this.resultPanel,
       this.supplyPanel, this.recordsPanel, this.labPanel, this.checkInPanel, this.quitPanel, this.rankingPanel,
-      this.achievementPanel, this.settingsPanel, this.worldPanel, this.worldShopPanel,
+      this.achievementPanel, this.settingsPanel, this.worldPanel, this.worldShopPanel, this.packSelectPanel, this.looseBoxPanel,
       this.transitionLayer]) {
       alignWidget(panel, { left: 0, right: 0, top: 0, bottom: 0 });
     }
@@ -269,7 +284,7 @@ export class DemoFlow extends Component {
       () => this.progressStore.readHomeSmokingStatus(), () => this.showCheckIn(),
       () => this.checkInStore.readSnapshot(), () => this.showQuit(),
       () => this.showRanking(), () => this.showAchievement(), () => this.showSettings(),
-      () => this.showDesktopGuide(), () => this.showRecords(), () => this.showLab());
+      () => this.showDesktopGuide(), () => this.showRecords(), () => this.showLab(), () => this.showPackSelect());
     if (this.pendingTopPrefab) {
       this.homeController.attachTopPrefab(this.pendingTopPrefab);
       this.pendingTopPrefab = null;
@@ -301,8 +316,9 @@ export class DemoFlow extends Component {
       () => this.checkInStore.readSnapshot()?.ticketBalance ?? null,
       () => this.ticketRefillStore.hasPending());
     this.checkInController = this.checkInPanel.addComponent(CheckInController);
-    this.checkInController.initialize(this.checkInStore, () => this.closeRecordsChild('checkin'), () => {
+    this.checkInController.initialize(this.checkInStore, () => this.closeCheckIn(), () => {
       this.homeController.setCheckInSnapshot(this.checkInStore.readSnapshot());
+      this.homeController.refreshPackBrowsing();
       this.syncAchievementProgress();
       this.homeController.setAchievementUnread(this.achievementStore.hasUnread());
     }, undefined, () => {
@@ -321,7 +337,7 @@ export class DemoFlow extends Component {
       onQuit: (price) => { this.recordsChild = 'quit'; this.showQuit(price); },
     });
     this.rankingController = this.rankingPanel.addComponent(ReceiveRankingController);
-    this.rankingController.initialize(emptyReceiveRankingSource, () => this.showHome());
+    this.rankingController.initialize(emptyReceiveRankingSource, () => this.closeRanking());
     this.achievementController = this.achievementPanel.addComponent(AchievementController);
     this.achievementController.initialize(this.achievementStore, () => this.showHome());
     this.settingsController = this.settingsPanel.addComponent(SettingsController);
@@ -357,6 +373,42 @@ export class DemoFlow extends Component {
       },
       readTickets: () => this.checkInStore.readSnapshot()?.ticketBalance ?? null,
     });
+    this.packSelectController = this.packSelectPanel.addComponent(PackSelectController);
+    const readPackState = createPackUnlockProgressReader({
+      readCompletedAchievements: () => {
+        const results = this.achievementStore.readResults();
+        return results === null ? null : results.filter((result) => result.completed).length;
+      },
+      readMaxCheckinStreak: () => this.checkInStore.readLongestKnownStreak(),
+      readCompletedSessions: () => this.progressStore.readSmokedCount(),
+    });
+    this.homeController.configurePackBrowsing(readPackState, () => this.extracting || this.packLockedController?.modalOpen || [
+      this.packSelectPanel, this.looseBoxPanel, this.rankingPanel, this.achievementPanel, this.recordsPanel,
+      this.checkInPanel, this.quitPanel, this.settingsPanel, this.worldPanel, this.worldShopPanel,
+      this.labPanel, this.supplyPanel, this.sessionPanel, this.resultPanel,
+    ].some(panel => panel?.active), id => this.packLockedController.present(id, 'home'));
+    this.packSelectController.initialize({
+      onBack: () => this.showHome(),
+      onLockedPack: id => this.packLockedController.present(id, 'catalog'),
+      onEnterLooseBox: () => this.showLooseBox(),
+      readLooseBox: () => {
+        const box = readLooseBox(emptyLooseBoxSource);
+        return box.known ? { available: box.count!, capacity: box.capacity! } : null;
+      },
+      readPack: () => this.packStore.readPack(),
+      readTickets: () => this.checkInStore.readSnapshot()?.ticketBalance ?? null,
+      readPackState,
+    });
+    this.looseBoxController = this.looseBoxPanel.addComponent(LooseBoxController);
+    this.looseBoxController.initialize({
+      onBack: () => {
+        this.looseBoxController.dismiss();
+        this.packSelectController.resume();
+        this.packSelectPanel.setSiblingIndex(this.node.children.length - 1);
+      },
+      onHome: () => this.showHome(),
+      onRanking: () => this.showRanking(true),
+    }, emptyLooseBoxSource);
     if (this.bottomPrefabForWorld) this.worldController.attachBottomNavigation(this.bottomPrefabForWorld);
     this.homeController.setBottomNavigationHandlers({
       onSmokeTab: () => { if (!this.homePanel.active) this.showHome(); },
@@ -366,6 +418,23 @@ export class DemoFlow extends Component {
     alignWidget(guideLayer, { left: 0, right: 0, top: 0, bottom: 0 });
     this.desktopGuide = guideLayer.addComponent(DesktopGuide);
     this.desktopGuide.initialize();
+    const packLockedLayer = createNode('PackLockedOverlay', this.node, DESIGN_WIDTH, DESIGN_HEIGHT);
+    alignWidget(packLockedLayer, { left: 0, right: 0, top: 0, bottom: 0 });
+    this.packLockedController = packLockedLayer.addComponent(PackLockedController);
+    this.packLockedController.initialize({
+      readTickets: () => this.checkInStore.readSnapshot()?.ticketBalance ?? null,
+      readState: readPackState,
+      onCheckIn: origin => this.showPackCheckIn(origin),
+      onModalChanged: (open, origin) => {
+        if (origin !== 'catalog') return;
+        if (open) this.packSelectController.suspend(true);
+        else this.packSelectController.resume();
+      },
+      onChanged: () => {
+        this.homeController.refreshPackBrowsing();
+        if (this.packSelectPanel.active) this.packSelectController.refresh();
+      },
+    });
     this.achievementStore.subscribe(() => {
       this.homeController.setAchievementUnread(this.achievementStore.hasUnread());
     });
@@ -374,6 +443,11 @@ export class DemoFlow extends Component {
   }
 
   private showHome(): void {
+    this.packLockedController?.dismiss();
+    this.packCheckInOrigin = null;
+    this.looseBoxController?.dismiss();
+    this.rankingFromLooseBox = false;
+    this.packSelectController?.dismiss();
     this.labController?.dismiss();
     this.labFromSession = false;
     this.recordsChild = null;
@@ -464,6 +538,28 @@ export class DemoFlow extends Component {
     this.checkInPanel.active = true;
   }
 
+  private showPackCheckIn(origin: PackActionOrigin): void {
+    if (this.extracting || this.checkInPanel.active) return;
+    this.packCheckInOrigin = origin;
+    if (origin === 'catalog') this.packSelectController.suspend(true);
+    this.showCheckIn();
+    this.checkInPanel.setSiblingIndex(this.node.children.length - 1);
+  }
+
+  private closeCheckIn(): void {
+    const origin = this.packCheckInOrigin;
+    if (!origin) { this.closeRecordsChild('checkin'); return; }
+    this.packCheckInOrigin = null;
+    this.checkInController.dismiss();
+    this.homeController.setCheckInSnapshot(this.checkInStore.readSnapshot());
+    this.homeController.refreshPackBrowsing();
+    if (origin === 'catalog') {
+      this.packSelectController.resume();
+      this.packSelectController.refresh();
+      this.packSelectPanel.setSiblingIndex(this.node.children.length - 1);
+    }
+  }
+
   private showQuit(price = false): void {
     if (this.extracting || this.quitPanel.active) return;
     if (price) this.quitController.presentPrice(); else this.quitController.present();
@@ -476,9 +572,12 @@ export class DemoFlow extends Component {
     this.quitPanel.active = true;
   }
 
-  private showRanking(): void {
+  private showRanking(fromLooseBox = false): void {
     if (this.extracting || this.rankingPanel.active) return;
+    this.rankingFromLooseBox = fromLooseBox;
+    if (fromLooseBox) this.looseBoxController.suspend(true);
     this.rankingController.present();
+    this.rankingPanel.setSiblingIndex(this.node.children.length - 1);
     this.homePanel.active = true;
     this.sessionPanel.active = false;
     this.resultPanel.active = false;
@@ -487,6 +586,14 @@ export class DemoFlow extends Component {
     this.quitPanel.active = false;
     this.transitionLayer.active = false;
     this.rankingPanel.active = true;
+  }
+
+  private closeRanking(): void {
+    if (!this.rankingFromLooseBox) { this.showHome(); return; }
+    this.rankingFromLooseBox = false;
+    this.rankingController.dismiss();
+    this.looseBoxController.resume();
+    this.looseBoxPanel.setSiblingIndex(this.node.children.length - 1);
   }
 
   private showAchievement(): void {
@@ -547,6 +654,23 @@ export class DemoFlow extends Component {
     this.worldShopController.present();
   }
 
+  private showPackSelect(): void {
+    if (this.extracting || this.packSelectPanel.active) return;
+    this.desktopGuide?.dismiss();
+    // Keep the home artwork available throughout both push and pop; the fixed panel blocks input.
+    this.homePanel.active = true;
+    this.packSelectController.present();
+    this.packSelectPanel.setSiblingIndex(this.node.children.length - 1);
+  }
+
+  private showLooseBox(): void {
+    if (this.extracting || this.looseBoxPanel.active) return;
+    this.packSelectController.suspend(true);
+    this.homePanel.active = true;
+    this.looseBoxController.present();
+    this.looseBoxPanel.setSiblingIndex(this.node.children.length - 1);
+  }
+
   private syncAchievementProgress(): void {
     const smoked = this.progressStore.readSmokedCount();
     if (smoked !== null) {
@@ -598,7 +722,9 @@ export class DemoFlow extends Component {
   private updateAchievementNotice(dt: number): void {
     if (!this.achievementStore) return;
     const blocked = (this.checkInPanel?.active && this.checkInController?.isUnlockOpen)
+      || this.packLockedController?.modalOpen
       || (this.recordsPanel?.active && this.recordsController?.modalOpen)
+      || (this.looseBoxPanel?.active && this.looseBoxController?.modalOpen)
       || this.labPanel?.active;
     if (this.achievementNotice) this.achievementNotice.active = !blocked;
     // V1.0.8 defers achievement notices until the check-in unlock modal closes.

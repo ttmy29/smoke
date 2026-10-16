@@ -14,6 +14,8 @@ interface CheckInSave {
   version: 1;
   cumulativeDays: number;
   streak: number;
+  /** Optional for older saves; keeps catalogue progress after a check-in gap. */
+  maxStreak?: number;
   lastCheckinDay: string | null;
   lastExtraTicketDay: string | null;
   ticketBalance: number;
@@ -63,6 +65,8 @@ function validSave(value: unknown): value is CheckInSave {
     && Number.isSafeInteger(save.cumulativeDays) && (save.cumulativeDays ?? -1) >= 0
     && Number.isSafeInteger(save.streak) && (save.streak ?? -1) >= 0
     && save.streak <= save.cumulativeDays
+    && (save.maxStreak === undefined || (Number.isSafeInteger(save.maxStreak)
+      && save.maxStreak >= save.streak && save.maxStreak <= save.cumulativeDays))
     && (save.lastCheckinDay === null || validDay(save.lastCheckinDay))
     && (save.lastExtraTicketDay === null || validDay(save.lastExtraTicketDay))
     && Number.isSafeInteger(save.ticketBalance) && (save.ticketBalance ?? -1) >= 0
@@ -99,6 +103,7 @@ export class CheckInStore {
         ...EMPTY_SAVE,
         cumulativeDays,
         streak,
+        maxStreak: streak,
         lastCheckinDay: checkedToday ? localDay(now) : streak > 0 ? previousDay(localDay(now)) : null,
         ticketBalance,
         ledger: [],
@@ -126,6 +131,26 @@ export class CheckInStore {
     }
   }
 
+  /** Historical evidence only: old saves may have lost a peak before ledger recording. */
+  public readLongestKnownStreak(): number | null {
+    try { return this.longestKnownStreak(this.readSave()); }
+    catch { return null; }
+  }
+
+  private longestKnownStreak(save: CheckInSave): number {
+    const days = Array.from(new Set((save.ledger ?? [])
+      .filter((entry) => entry.reason === 'daily-checkin').map((entry) => entry.day))).sort();
+    let longest = Math.max(save.maxStreak ?? 0, save.streak);
+    let run = 0;
+    let previous: string | null = null;
+    for (const day of days) {
+      run = previous === previousDay(day) ? run + 1 : 1;
+      longest = Math.max(longest, run);
+      previous = day;
+    }
+    return longest;
+  }
+
   public checkInToday(now = Date.now()): CheckInResult {
     try {
       const save = this.readSave();
@@ -137,6 +162,8 @@ export class CheckInStore {
         ...save,
         cumulativeDays: save.cumulativeDays + 1,
         streak: save.lastCheckinDay === previousDay(today) ? save.streak + 1 : 1,
+        maxStreak: Math.max(this.longestKnownStreak(save),
+          save.lastCheckinDay === previousDay(today) ? save.streak + 1 : 1),
         lastCheckinDay: today,
         ticketBalance: save.ticketBalance + 1,
       };

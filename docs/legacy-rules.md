@@ -1,5 +1,21 @@
 # 旧包规则审计：业务、时间与绘制
 
+锁态点击核对（2026-10-16）：V1.0.8 首页 handleLockedPackTap 与目录 choosePack 对普通锁态调用 2200ms 条件提示；华孑票少于 2 张进打卡，否则展示 themed-confirm。“用 2 张烟票兑换华孑？”／“兑换后永久解锁这款烟盒，并获得首盒 10 根赛博烟。”及“先等等／兑换烟盒”为原文，默认遮罩不可关闭。Cocos 已接 UI 与逐级返回，真实扣票／永久解锁／首盒事务仍留接口；不能把普通条件提示误写成所有烟盒都会进入新页面。详见 [锁态按钮与兑换界面](pack-locked-actions.md)。
+
+主按钮文案核对（2026-10-16）：V1.0.8 首页 Q 映射锁态华孑为“用 2 张烟票解锁”、其他锁态为“查看解锁条件”、空盒为“补一盒”、正常为“来一根”；模板在 isBusy 时优先覆盖为“正在抽出”，底字和扫光层使用同一文字。Cocos 已统一该优先级，指定预制体 Label 保留底字，高亮也使用相同 Cocos 排版。此为当前引擎下的对齐修复，不宣称 CSS 高亮材质已等效，效果由用户验收。
+
+首页滑盒补充（2026-10-16）：V1.0.8 首页 swiper circular=true、普通 duration=280；handlePackChange 仅接 touch，browsePreviousPack／browseNextPack 按实际 homePacks.length 取模。getCyberGameSnapshot 过滤未取得祖国及未解锁无影烟，无影烟排序在前，因此默认八款，页码不能写死。未解锁可浏览，但不调用 selectCyberPack 或开始取烟。Cocos 已实现循环 UI、状态同步、输入隔离及共享盒体首页模式，永久选择与多盒业务仍留接口；提示栏遵循工作区之后、左列对齐，并适配当前固定烟盒／预制体。依据及差异见 [首页滑盒](home-pack-browser.md)，未宣称动画等效。
+
+选盒切页修正（2026-10-16）：Cocos 当前 push／pop 保留父页面绘制，首页作为栈底，选盒／散烟盒通过 suspend(true) 冻结交互而非立即隐藏。该修正处理当前实现提前隐藏父页造成的黑底，不涉及烟盒自身阴影，也不宣称已等效微信原生导航动效。状态检查通过，效果由用户验收。
+
+散烟盒基准补充（2026-10-16）：旧包 `settings-tools/pages/loose-box/loose-box.js` 及 `chunk_6.webview.js` 定义页面、收烟榜入口、详情和丢弃确认；`domain/social-gift.js` 六级容量 1／5／7／10／15／20，战列舰五根占五格且整组取用，满级隐藏升级按钮。Cocos 已接通页面和这些 UI 分支，榜单按来源逐级返回；当前没有好友库存源，不执行旧包的社交、广告与会话事务。具体模板、组件和检查边界见 [散烟盒](loose-box.md)。旧条目“散烟盒保留静默接口”现仅指业务回调，导航已落地。
+
+选盒进度规则补充：V1.0.8 `domain/tasks.js` 的 derivePackUnlocks 将任务指标限制在 0～target，已永久解锁时进度取 target；选盒页仅在锁遮罩内显示 target>1 的 `progress / target`。`services/achievement-tracker.js` 从 countUnlockedAchievements(ledger.unlocks) 同步 completedAchievements，按已解锁成就计数而非未读数。最长连续天数为 maxCheckinStreak，不是累计打卡或断签后的当前连续值。Cocos 已按该目标映射接通现有真实指标，分享次数未知，历史峰值仅能恢复现存证据；仍不执行永久解锁事务。详见 [选盒页](pack-select.md)。
+
+## 选盒目录基准补充（2026-10-16）
+
+V1.0.8 首页 `openPackCatalog` 打开 `/pack-skins/pages/pack-select/pack-select?switch=1`，页面无 `packId` 时走 catalog；带 `packId` 的空盒路径另走 supply。`pack-skins/app-service-1.js` 的选盒页和 `pack-skins/chunk_0.webview-1.js`、`page-frame-1.js` 共同确定目录：标题及余额、散烟盒、两列烟盒、锁和条件、当前与首盒免费标记、派烟与页底说明。旧包点可用款式会选择并返回，华孑有两票兑换确认，其他锁态展示条件，另有派烟、广告解锁和活动详情。本轮 Cocos 按用户最新确认还原目录 UI 与入口，只有王溪使用真实库存并可返回；广告按钮、散烟盒及派烟按旧包显示并保留静默接口，不执行业务，不添加开发状态文案。尺寸、路径、差异与检查边界见 [选一盒](pack-select.md)。这不是完整旧包选盒业务等效。
+
 原审计日期：2026-09-24；V1.0.8 基准补充日期：2026-09-29。本文主体最初来自只读 V1.0.7 编译包 `E:\json\smoke_wxd0b7dafebccb8110_unpacked`，不是原始 TypeScript。现已确认当前视觉与交互验收基准为 `E:\json\wxd0b7dafebccb8110_unpacked` 中的 **V1.0.8**：优先读取 `app-config-1.json`、同名 `*-1` 文件及新增的 `chunk_10`～`chunk_13`、`world-tools/`、`custom-tab-bar/`。本文既有的 122 模块统计和哈希属于 V1.0.7 历史审计，不代表 V1.0.8 全包已重新索引；若两版冲突，以 V1.0.8 为准。
 
 本文记录**从编译代码可直接证实**的规则；[模块与可静态识别方法索引](legacy-module-index.md)当前仅覆盖 V1.0.7 历史入口，本文详细展开与三页演示及抽烟画面有关的函数。压缩包中的匿名回调、运行时函数和平台实际行为无法仅凭静态代码做到“所有方法语义 100% 证明”。下文路径均为旧包 `currentFile` 路径。

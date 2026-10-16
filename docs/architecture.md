@@ -1,5 +1,21 @@
 # Cocos 模块拆分（当前实现与后续扩展）
 
+锁态入口共用 PackLockedAction（只读分支）和 PackLockedController（条件提示／华孑确认）。DemoFlow 将首页 onPreviewAction、目录 onLockedPack 接入；确认弹层期间冻结目录和首页轮播，延后成就通知。烟票不足走现有 CheckInController，packCheckInOrigin 保存 home／catalog 来源，返回恢复原位置；普通打卡与记录子页返回继续走原逻辑。真实兑换留在 onConfirmExchange 事务适配器，UI 不写存档。详见 [锁态按钮与兑换界面](pack-locked-actions.md)。
+
+主按钮文案收敛至 HomeController.mainButtonCopy／refreshMainButtonText，优先覆盖正在抽出，避免轮播、开盖和入场分别改字产生旧状态。首页 TextSweep 开启 renderBaseWithLabel：原 Label 底字常驻，三段 Mask 内的原生 Label 复制字体、字号、字距、尺寸、对齐和锚点，裁切移动时保持字形原点相同；不创建 CanvasTexture。默认 Canvas 模式仍保留给已有组件。详见 [通用 UI 组件](ui-components.md)。
+
+首页轮播由 `HomePackBrowserModel`（集合、文案、手势）与 `HomePackBrowser`（视口、切换、缓存与生命周期）承担。HomeController 只对接入口、实际王溪节点和顶部／主按钮读数；DemoFlow 提供与目录共用的进度读取及页面覆盖判断。王溪原 PackRoot 移入轮播 LifePage 后按原 502×728、(-185,-50) 绘制，不再补偿旧工作区缩放；导航独立定位于盒体下方，读取格言预制体边界。PackBoxView 新增 home 模式，共用盒体与皮肤裁切，默认目录模式不变。详见 [首页滑盒](home-pack-browser.md)。
+
+散烟盒补充：`PackSelectController.onEnterLooseBox → DemoFlow.showLooseBox → LooseBoxController`。独立 LooseBoxPanel 管理固定导航、正文、详情及徽章弹层；LooseContainerView 负责六级盒体绘制，LooseBoxModel 定义只读来源、容量和五根组计数。父页 suspend／resume 保留滚动；DemoFlow 记录榜单来源，榜单返回散烟盒，避免直接回首页。DemoFlow 当前传 emptyLooseBoxSource，社交库存及广告／抽取／丢弃事务留在可选接口。详见 [散烟盒](loose-box.md)。
+
+选盒进度数据流：`DemoFlow → createPackUnlockProgressReader → PackSelectController.readPackState`，读取 AchievementStore 已完成条目数、ProgressStore 累计根数、CheckInStore.readLongestKnownStreak；缺失的分享次数保留可选数据源。PackUnlockProgress 只导出只读进度，不管理解锁。CheckInStore 以可选 maxStreak 保留历史峰值，旧档结合现存连续段和打卡流水恢复已知最大值，原 readSnapshot 的当前连续天数语义保持不变。详见 [选盒页](pack-select.md)。
+
+## 选盒页补充（2026-10-16）
+
+`HomeController.activatePackSelect → DemoFlow.showPackSelect → PackSelectController` 管理首页 `side/record3/bg` 的目录页入口。独立 `PackSelectPanel` 覆盖首页并阻断底层输入，首页保留绘制用于进出过渡，返回调用既有 `showHome`；开盖／取烟期间拒绝进入。`scripts/packs/PackCatalog.ts` 保存十款静态目录，控制器接收导航与只读数据接口，不写存档。王溪从 resources 加载，其余七款从 `legacy-temp` Bundle 加载 SpriteFrame，异步回调校验组件有效性并在销毁时释放引用。750 布局统一缩放，正文纵向滚动。PackBoxView 根据旧包目录尺寸绘制盒盖／正面／侧面，与主页共用 createPackSkin 和文字阴影；祖国图已取得，其他业务保留可选回调，不添加开发占位文案。多盒业务未接入，详见 [选一盒](pack-select.md)。本节更新下文历史“换盒无业务回调”的描述。
+
+选盒／散烟盒子页面通过 `suspend(true)` 保留父页绘制、冻结点击和滚动；返回 `resume()` 恢复。页面栈底保留首页，避免 push／pop 期间暴露相机清屏色。默认无参数 suspend 仍可隐藏，dismiss 负责真正退出。散烟盒可见暂停时仍递增异步代次，旧请求不能刷新被覆盖页面。
+
 ## 场景
 
 第一版沿用 `assets/scenes/game.scene`，在一个场景中切换首页、会话、结果、补盒、打卡、戒烟、排行、成就、设置、全服及全服商店面板，共享 Canvas、音频控制和一次会话数据。全服面板通过首页底部导航进入，隐藏首页预制体，使用导航副本返回；商店覆盖在全服页之上，返回保留原滚动位置。独立的数据和入口接口见 [全服主页](world-page.md)。

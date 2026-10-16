@@ -1,0 +1,385 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-10-16",
+  "sourceRoot": "E:\\json\\wxd0b7dafebccb8110_unpacked",
+  "sourceVersion": "V1.0.7 and V1.0.8 merged unpack; runtime reference V1.0.8",
+  "purpose": "Staging only; no Cocos import or runtime changes",
+  "deduplication": "SHA-256; existing project assets reused; distinct variants retained; identical suffix variants prefer original name",
+  "entries": [
+    {
+      "source": "audio/actions/ash-tap.mp3",
+      "status": "already-present",
+      "target": "assets/resources/audio/ash-tap.mp3",
+      "bytes": 801,
+      "sha256": "ba93a9f8770421469b4aa043dfae3753dd2b6d754d5aaf2730b1f1d7ef1da71b"
+    },
+    {
+      "source": "audio/actions/exhale-deep.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/actions/exhale-deep.mp3",
+      "bytes": 5769,
+      "sha256": "d5ac641339551b877b00f9c18d79569e1ef79a586752c5016bffb32f6616c261"
+    },
+    {
+      "source": "audio/actions/exhale-soft.mp3",
+      "status": "already-present",
+      "target": "assets/resources/audio/exhale.mp3",
+      "bytes": 3069,
+      "sha256": "3ab96a8dbc713dfb62c7c4c51b8de1f248544c02983f91bd89287aaee4933164"
+    },
+    {
+      "source": "audio/actions/exhale-steady.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/actions/exhale-steady.mp3",
+      "bytes": 3501,
+      "sha256": "aa952e97548841d3eb6314a4a9d38cea139ed7df09d2e7364f41e6909fe7ffae"
+    },
+    {
+      "source": "audio/actions/inhale-current.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/actions/inhale-current.mp3",
+      "bytes": 5280,
+      "sha256": "b0690d3da854e97e724b77aaf0ebc534757f7d12fc197bd50c05931843d2e724"
+    },
+    {
+      "source": "audio/actions/inhale.mp3",
+      "status": "already-present",
+      "target": "assets/resources/audio/inhale.mp3",
+      "bytes": 8793,
+      "sha256": "83aa3fab49041f0f4455c7cb0577696367495326973aecb34e9bef027634d447"
+    },
+    {
+      "source": "audio/ambience/blue-key-rain.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ambience/blue-key-rain.mp3",
+      "bytes": 15429,
+      "sha256": "6e071e910171258dbb6b10ad89731c4c6d33b9eb783e3f03311aa99daf228d99"
+    },
+    {
+      "source": "audio/ambience/eaves-downpour.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ambience/eaves-downpour.mp3",
+      "bytes": 15429,
+      "sha256": "f9c7a15535f623a401441b42cc005911455068fe6cb683a1a23b5f3913ab91e9"
+    },
+    {
+      "source": "audio/ambience/lamp-crickets.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ambience/lamp-crickets.mp3",
+      "bytes": 15429,
+      "sha256": "4ed70907f1b5e6a1c49597eb32e49353f177a0021b2a43eb462884abad41c807"
+    },
+    {
+      "source": "audio/ambience/night-tide.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ambience/night-tide.mp3",
+      "bytes": 20493,
+      "sha256": "23df4800652cb046e2f43865511c826cdb4e0bb5c45bc6aefc6a35dc39cdb5db"
+    },
+    {
+      "source": "audio/ignition/ember-wheel.mp3",
+      "status": "already-present",
+      "target": "assets/resources/audio/ignition.mp3",
+      "bytes": 5769,
+      "sha256": "c12d28fc61aae9e3a22245e54d2204b520dcfd300a2988b97ac9607540eed330"
+    },
+    {
+      "source": "audio/ignition/flame-burning.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ignition/flame-burning.mp3",
+      "bytes": 17936,
+      "sha256": "48b1bffb3bec3de0a88770f64e6c5f3b901adf1f016aaeeeea6c5e7da384ef72"
+    },
+    {
+      "source": "audio/ignition/night-arc.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ignition/night-arc.mp3",
+      "bytes": 6741,
+      "sha256": "a4c7489398a4f29b48841a6d4e655e88043e47141d130d8cf3d76267744d11d4"
+    },
+    {
+      "source": "audio/ignition/paper-match.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ignition/paper-match.mp3",
+      "bytes": 10845,
+      "sha256": "a9b0bdba44e834bc5b01a144700bfe087ecff7714d3fd6024e98524b0c0963ce"
+    },
+    {
+      "source": "audio/ignition/silver-flame.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ignition/silver-flame.mp3",
+      "bytes": 1844,
+      "sha256": "4dc580b038d58921008a2965064504865777e4c7e9cae4cf19553bb25a887625"
+    },
+    {
+      "source": "audio/actions/ash-tap-1.mp3",
+      "status": "already-present",
+      "target": "assets/resources/audio/ash-tap.mp3",
+      "bytes": 801,
+      "sha256": "ba93a9f8770421469b4aa043dfae3753dd2b6d754d5aaf2730b1f1d7ef1da71b"
+    },
+    {
+      "source": "audio/actions/exhale-deep-1.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/actions/exhale-deep-1.mp3",
+      "bytes": 4128,
+      "sha256": "165133fcd27219904bb69de63272069ac67835519118e0d425e97df5273ab6c1"
+    },
+    {
+      "source": "audio/actions/exhale-soft-1.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/actions/exhale-soft-1.mp3",
+      "bytes": 2304,
+      "sha256": "058520a80d3fc04938ff232762651d28bae8c03a99256f45c3afb986a75aa60b"
+    },
+    {
+      "source": "audio/actions/exhale-steady-1.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/actions/exhale-steady-1.mp3",
+      "bytes": 2592,
+      "sha256": "224c73d06b707b1390e25bd891d57ec499823c4bc02e97f5c1ac4c084213ae79"
+    },
+    {
+      "source": "audio/actions/inhale-1.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/actions/inhale-1.mp3",
+      "bytes": 6144,
+      "sha256": "2fd4883ce7de198d622ef94496b1365f4a8aef884beb10676ad62e81636d659d"
+    },
+    {
+      "source": "audio/ignition/ember-wheel-1.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ignition/ember-wheel-1.mp3",
+      "bytes": 4128,
+      "sha256": "61d8be92f2973ba69fddfc8007bbd4dfd972ee9913fa09ba294537d118fa5de0"
+    },
+    {
+      "source": "audio/ignition/flame-burning-1.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ignition/flame-burning-1.mp3",
+      "bytes": 6072,
+      "sha256": "968f0180ee0bbed24f4ab2e470048ca240a17b753668966d0a5a043c841a5f30"
+    },
+    {
+      "source": "audio/ignition/night-arc-1.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ignition/night-arc-1.mp3",
+      "bytes": 4752,
+      "sha256": "b64c07fb7a652eac2d8395e4d6fd6a19e662fe98d5da251ce341acd960c8db24"
+    },
+    {
+      "source": "audio/ignition/paper-match-1.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/audio/ignition/paper-match-1.mp3",
+      "bytes": 7488,
+      "sha256": "e3c82dccb32ace044e7b392d79ab15fdb94ce29a0af1718a70f3834d11a73a0f"
+    },
+    {
+      "source": "audio/ignition/silver-flame-1.mp3",
+      "status": "identical-duplicate",
+      "target": "legacy-assets/v1.0.8-merged/audio/ignition/silver-flame.mp3",
+      "bytes": 1844,
+      "sha256": "4dc580b038d58921008a2965064504865777e4c7e9cae4cf19553bb25a887625"
+    },
+    {
+      "source": "settings-tools/audio/ambience/blue-key-rain.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/settings-tools/audio/ambience/blue-key-rain.mp3",
+      "bytes": 10320,
+      "sha256": "3b657230c3e5e563a3b2e04ec8be3ec2af3dc61314e69012875a2213ca518720"
+    },
+    {
+      "source": "settings-tools/audio/ambience/eaves-downpour.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/settings-tools/audio/ambience/eaves-downpour.mp3",
+      "bytes": 10320,
+      "sha256": "75330f6e4faf9ee53300993c5ee4a0cafcc535ddd659cc0c2f8f7622d65195ba"
+    },
+    {
+      "source": "settings-tools/audio/ambience/lamp-crickets.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/settings-tools/audio/ambience/lamp-crickets.mp3",
+      "bytes": 10320,
+      "sha256": "7c47f76ccd1ad60a48d10724a18bda859cdf5867c6f990d30d85292602936f55"
+    },
+    {
+      "source": "settings-tools/audio/ambience/night-tide.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/settings-tools/audio/ambience/night-tide.mp3",
+      "bytes": 10320,
+      "sha256": "6a35e19fef07c84b3536f0a96744caa27d519ba7104cfa9a24aa31c45c052de0"
+    },
+    {
+      "source": "settings-tools/assets/real-smoking-ding.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/settings-tools/assets/real-smoking-ding.mp3",
+      "bytes": 19098,
+      "sha256": "256ddb5352d04b971246d2e503b10e27f72112b2af08531369f41a00cf078506"
+    },
+    {
+      "source": "settings-tools/assets/real-smoking-ding-1.mp3",
+      "status": "identical-duplicate",
+      "target": "legacy-assets/v1.0.8-merged/settings-tools/assets/real-smoking-ding.mp3",
+      "bytes": 19098,
+      "sha256": "256ddb5352d04b971246d2e503b10e27f72112b2af08531369f41a00cf078506"
+    },
+    {
+      "source": "world-tools/audio/bullet-time-clean.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/world-tools/audio/bullet-time-clean.mp3",
+      "bytes": 9169,
+      "sha256": "586eabc04b3ec7f38adee333643c58cf75f1f6b60689ce2cb40757ab15206908"
+    },
+    {
+      "source": "world-tools/audio/collection-exhale.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/world-tools/audio/collection-exhale.mp3",
+      "bytes": 6288,
+      "sha256": "cc134b0c28dc33755d9bb28fa92d647db6de2f2bbc299df3c9bcd296acba6e8a"
+    },
+    {
+      "source": "world-tools/audio/cough-female.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/world-tools/audio/cough-female.mp3",
+      "bytes": 3360,
+      "sha256": "f3aa44f16d3235232341eeef6567b8852fa92b9dfdfa8ca931430d7bcb9a0c4b"
+    },
+    {
+      "source": "world-tools/audio/cough-male.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/world-tools/audio/cough-male.mp3",
+      "bytes": 2832,
+      "sha256": "2b5041865a0a9f2edcfe67983f64c34961c40a21e6c2f99f5cedd512142abdea"
+    },
+    {
+      "source": "world-tools/audio/cough.mp3",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/world-tools/audio/cough.mp3",
+      "bytes": 4272,
+      "sha256": "c6ebef3bfeac887de2fff3c7085aa9959e7e7069b0199d1472189d30b5f48e44"
+    },
+    {
+      "source": "assets/packs/life/skin.jpg",
+      "status": "already-present",
+      "target": "assets/resources/textures/packs/wang-xi.jpg",
+      "bytes": 7932,
+      "sha256": "229893472b9c117f5dd46dda6621bdc1ddde6ca35ac38a3ab70d4aa985f119eb"
+    },
+    {
+      "source": "assets/packs/life/skin-1.jpg",
+      "status": "already-present",
+      "target": "assets/resources/textures/packs/wang-xi.jpg",
+      "bytes": 7932,
+      "sha256": "229893472b9c117f5dd46dda6621bdc1ddde6ca35ac38a3ab70d4aa985f119eb"
+    },
+    {
+      "source": "pack-skins/assets/flowing-gold.jpg",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/flowing-gold.jpg",
+      "bytes": 7734,
+      "sha256": "8e53926c5421137aecb2e2cba052836486e92f6e3710e8a36b349a0787970da8"
+    },
+    {
+      "source": "pack-skins/assets/fog-harbor.jpg",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/fog-harbor.jpg",
+      "bytes": 7564,
+      "sha256": "bcbf0c7ee0a39918c1927e93cd2d54a2b17f72ea0a0d0b04ec164d638d36712b"
+    },
+    {
+      "source": "pack-skins/assets/neon-bridge.jpg",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/neon-bridge.jpg",
+      "bytes": 7595,
+      "sha256": "da73fdea6063421acb4cbce40eb34f0f2d62ce5b23677809096bd72f8c0a37cb"
+    },
+    {
+      "source": "pack-skins/assets/night-voyage.jpg",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/night-voyage.jpg",
+      "bytes": 7482,
+      "sha256": "e0bbec97c334e9db9d4a4d3cbbfe5626b2bdbe415bea2d680f757ca84973b51d"
+    },
+    {
+      "source": "pack-skins/assets/red-equator.jpg",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/red-equator.jpg",
+      "bytes": 7542,
+      "sha256": "18525b39639dad3d5d6a3804b635ee442e5c7f37c1043c49bcff4302d938a253"
+    },
+    {
+      "source": "pack-skins/assets/slow-tide.jpg",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/slow-tide.jpg",
+      "bytes": 7639,
+      "sha256": "b8f4214ddc7bf856372cadff69e95f7ed88dff3674d09eb53905ca0bbf80dec6"
+    },
+    {
+      "source": "pack-skins/assets/zero-hour.jpg",
+      "status": "copied",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/zero-hour.jpg",
+      "bytes": 7483,
+      "sha256": "a3ed7fb2d026e85810ab2668f2393d98034abb1244ef9abcfbaa104dbbfd1fc6"
+    },
+    {
+      "source": "pack-skins/assets/flowing-gold-1.jpg",
+      "status": "identical-duplicate",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/flowing-gold.jpg",
+      "bytes": 7734,
+      "sha256": "8e53926c5421137aecb2e2cba052836486e92f6e3710e8a36b349a0787970da8"
+    },
+    {
+      "source": "pack-skins/assets/fog-harbor-1.jpg",
+      "status": "identical-duplicate",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/fog-harbor.jpg",
+      "bytes": 7564,
+      "sha256": "bcbf0c7ee0a39918c1927e93cd2d54a2b17f72ea0a0d0b04ec164d638d36712b"
+    },
+    {
+      "source": "pack-skins/assets/neon-bridge-1.jpg",
+      "status": "identical-duplicate",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/neon-bridge.jpg",
+      "bytes": 7595,
+      "sha256": "da73fdea6063421acb4cbce40eb34f0f2d62ce5b23677809096bd72f8c0a37cb"
+    },
+    {
+      "source": "pack-skins/assets/night-voyage-1.jpg",
+      "status": "identical-duplicate",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/night-voyage.jpg",
+      "bytes": 7482,
+      "sha256": "e0bbec97c334e9db9d4a4d3cbbfe5626b2bdbe415bea2d680f757ca84973b51d"
+    },
+    {
+      "source": "pack-skins/assets/red-equator-1.jpg",
+      "status": "identical-duplicate",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/red-equator.jpg",
+      "bytes": 7542,
+      "sha256": "18525b39639dad3d5d6a3804b635ee442e5c7f37c1043c49bcff4302d938a253"
+    },
+    {
+      "source": "pack-skins/assets/slow-tide-1.jpg",
+      "status": "identical-duplicate",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/slow-tide.jpg",
+      "bytes": 7639,
+      "sha256": "b8f4214ddc7bf856372cadff69e95f7ed88dff3674d09eb53905ca0bbf80dec6"
+    },
+    {
+      "source": "pack-skins/assets/zero-hour-1.jpg",
+      "status": "identical-duplicate",
+      "target": "legacy-assets/v1.0.8-merged/pack-skins/assets/zero-hour.jpg",
+      "bytes": 7483,
+      "sha256": "a3ed7fb2d026e85810ab2668f2393d98034abb1244ef9abcfbaa104dbbfd1fc6"
+    }
+  ],
+  "remoteReferencedButNotCopied": [
+    "world-tools/audio/canon-full.m4a",
+    "zuguo/pack-v1.jpg",
+    "zuguo/ashSalute-v1.png",
+    "zuguo/exhalePalette-v1.png",
+    "zuguo/ringPalette-v1.png",
+    "zuguo/textRing-v1.png",
+    "zuguo/tipPalette-v1.png",
+    "zuguo/activity-share-v1.jpg"
+  ],
+  "remoteNotes": "Referenced by old config/remote-audio.js; absent locally; not downloaded. Local audio may also have remote variants; see docs/legacy-asset-audit.md."
+}

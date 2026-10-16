@@ -1,5 +1,7 @@
 # 素材需求与待确认项
 
+选盒 UI 最新补充：祖国 `pack-v1.jpg` 已依旧包来源取得并通过原大小／MD5 校验，导入 `assets/legacy-temp/pack-skins/assets/zuguo.jpg`。选盒页使用九款皮肤，无影烟按旧包隐藏盒体；回调接口和使用边界见 [选盒页](pack-select.md)。
+
 ## 已收到的四张参考图
 
 用户提供的截图已本地保存到 `docs/reference/`：`01-home.png`、`02-extraction.png`、`03-session-before-ignition.png`、`04-result.png`。布局观察和第一版取舍见 `visual-reference.md`。这些是**参考图**，不会直接作为 Cocos 运行时全屏贴图使用。
@@ -25,7 +27,9 @@
 - `assets/resources/audio/exhale.mp3` ← `audio/actions/exhale-soft.mp3`。
 - `assets/resources/audio/ash-tap.mp3` ← `audio/actions/ash-tap.mp3`。
 
-资源引用和替换标记集中在 `assets/scripts/assets/AssetCatalog.ts`。其余旧资源没有复制。
+资源引用和替换标记集中在 `assets/scripts/assets/AssetCatalog.ts`。运行时仍仅接入上述资源。2026-10-16 已将当前缺少的 29 个本地音频和 7 张普通烟盒图片复制至 Cocos `assets` 之外的 [素材暂存目录](../legacy-assets/v1.0.8-merged/README.md)，尚未导入或接入；版本、用途和远程资源缺口见 [素材审计](legacy-asset-audit.md)。
+
+后续导入已完成：上述 36 份素材已进入 `assets/legacy-temp/` 独立 Bundle，Creator 元数据和导入产物已核对；[导入清单](../legacy-assets/v1.0.8-merged/cocos-import.json) 提供路径与 UUID。仅导入，不替换现有素材，不修改运行逻辑。
 
 ## 已决定／未决定
 

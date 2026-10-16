@@ -4,9 +4,12 @@ import { alignWidget, color, createButton, createLabel, createNode, createRect, 
 import { CanvasTexture } from '../session/effects/CanvasTexture';
 import { UIButton } from '../common/UIButton';
 import { TextSweep } from '../common/TextSweep';
+import { applyPackCopyShadow, createPackSkin } from '../packs/PackBoxView';
 import { countAvailableSlots, PackSnapshot } from '../persistence/PackStore';
 import type { HomeSmokingStatus } from '../persistence/ProgressStore';
 import type { CheckInSnapshot } from '../persistence/CheckInStore';
+import { HomePackBrowser, HomePackBrowserHooks } from './HomePackBrowser';
+import { homePackAction, HomePackReader } from './HomePackBrowserModel';
 
 const { ccclass } = _decorator;
 
@@ -61,6 +64,7 @@ export class HomeController extends Component {
   private onDesktopGuide: (() => void) | null = null;
   private onRecords: (() => void) | null = null;
   private onLab: (() => void) | null = null;
+  private onPackSelect: (() => void) | null = null;
   private recordsHint: Node | null = null;
   private bottomNavigationHandlers: BottomNavigationHandlers = {};
   private checkInSnapshot: CheckInSnapshot | null = null;
@@ -149,13 +153,18 @@ export class HomeController extends Component {
   private lidAnimating = false;
   private extractAfterOpen = false;
   private displayedPackInstanceId = '';
+  private packBrowser: HomePackBrowser | null = null;
+  private readBrowseState: HomePackReader = () => null;
+  private browseBlocked: () => boolean = () => false;
+  private browseWasBlocked = false;
 
   public initialize(onStart: (slotIndex: number) => void, onSupply: () => void,
     onOpenLid: (instanceId: string) => PackSnapshot | null,
     onReadHomeSmokingStatus: () => HomeSmokingStatus | null,
     onCheckIn: () => void, onReadCheckInStatus: () => CheckInSnapshot | null,
     onQuit: () => void, onRanking: () => void, onAchievement: () => void,
-    onSettings?: () => void, onDesktopGuide?: () => void, onRecords?: () => void, onLab?: () => void): void {
+    onSettings?: () => void, onDesktopGuide?: () => void, onRecords?: () => void, onLab?: () => void,
+    onPackSelect?: () => void): void {
     this.onStart = onStart;
     this.onSupply = onSupply;
     this.onOpenLid = onOpenLid;
@@ -168,8 +177,54 @@ export class HomeController extends Component {
     this.onDesktopGuide = onDesktopGuide ?? null;
     this.onRecords = onRecords ?? null;
     this.onLab = onLab ?? null;
+    this.onPackSelect = onPackSelect ?? null;
     this.onReadCheckInStatus = onReadCheckInStatus;
     this.build();
+    const browserNode = createNode('HomePackBrowser', this.node, 550, 760,
+      HomeController.PACK_POSITION_X, HomeController.PACK_POSITION_Y);
+    this.packBrowser = browserNode.addComponent(HomePackBrowser);
+    this.packBrowser.initialize(this.packRoot, {
+      readState: id => id === 'life' ? { unlocked: !!this.pack, remaining: this.pack ? countAvailableSlots(this.pack) : undefined, capacity: 10 }
+        : this.readBrowseState(id),
+      blocked: () => this.entryMode || this.lidAnimating || this.extractingSlot !== null || this.browseBlocked(),
+      onChanged: (entry, index, count) => {
+        this.packSwitchCaption.string = `左右滑动换一盒 · ${index + 1} / ${count}`;
+        this.refreshBrowseChrome();
+      },
+    });
+    this.packNavigation.setParent(this.node);
+    this.refreshLayout();
+  }
+
+  public configurePackBrowsing(readState: HomePackReader, blocked: () => boolean,
+    onPreviewAction?: HomePackBrowserHooks['onPreviewAction']): void {
+    this.readBrowseState = readState; this.browseBlocked = blocked;
+    this.packBrowser?.configure({ onPreviewAction });
+  }
+
+  public refreshPackBrowsing(): void { this.packBrowser?.refresh(); }
+
+  private refreshBrowseChrome(): void {
+    if (!this.packBrowser?.current) return;
+    this.browseWasBlocked = this.browseBlocked();
+    const { state } = this.packBrowser.current;
+    const life = this.packBrowser.isLife;
+    const remaining = life ? this.pack ? countAvailableSlots(this.pack) : null
+      : Number.isSafeInteger(state.remaining) && state.remaining! >= 0 ? state.remaining! : null;
+    const capacity = life ? 10 : Number.isSafeInteger(state.capacity) && state.capacity! > 0 ? state.capacity : null;
+    const fraction = remaining === null || !capacity ? '—' : `${remaining}/${capacity}`;
+    this.packStatusLabel.string = fraction;
+    this.inventoryUnitLabel.string = remaining === null ? '' : '支';
+    if (this.prefabPackLabel) this.prefabPackLabel.string = fraction;
+    this.prefabInventoryIcons.forEach((node, index) => { node.active = remaining !== null && index < remaining; });
+    this.inventorySegments.forEach((segment, index) => {
+      segment.filled.node.active = remaining !== null && index < remaining;
+      segment.empty.node.active = remaining !== null && index >= remaining;
+    });
+    const enabled = !this.entryMode && !this.lidAnimating && !this.packBrowser.animating && !this.browseWasBlocked && (!life || !!this.pack);
+    this.startButton.interactable = enabled;
+    if (this.prefabStartButton) this.prefabStartButton.interactable = enabled;
+    this.refreshMainButtonText();
   }
 
   /** Optional navigation hooks; unset handlers leave the two tabs silent. */
@@ -187,7 +242,14 @@ export class HomeController extends Component {
     this.bottomNavigationHandlers.onWorldTab?.();
   }
 
+  private activatePackSelect(): void {
+    if (this.entryMode || this.lidAnimating) return;
+    this.onPackSelect?.();
+  }
+
   protected update(deltaTime: number): void {
+    const blocked = this.browseBlocked();
+    if (blocked !== this.browseWasBlocked) { this.browseWasBlocked = blocked; this.refreshBrowseChrome(); }
     this.refreshLayout();
     const minute = Math.floor(Date.now() / 60000);
     if (this.homeStatusMinute !== minute) {
@@ -287,6 +349,7 @@ export class HomeController extends Component {
   }
 
   private refreshPrefabInventory(): void {
+    if (this.packBrowser && !this.packBrowser.isLife) { this.refreshBrowseChrome(); return; }
     const remaining = this.pack ? countAvailableSlots(this.pack) : 0;
     if (this.prefabPackLabel) this.prefabPackLabel.string = this.pack ? `${remaining}/10` : '--';
     this.prefabInventoryIcons.forEach((icon, index) => { icon.active = index < remaining; });
@@ -319,8 +382,16 @@ export class HomeController extends Component {
       this.prefabStartLabel = one.getChildByName('Label')?.getComponent(Label) ?? null;
       if (this.prefabStartLabel) {
         const label = this.prefabStartLabel;
-        label.node.active = true;
+        label.node.active = false;
+        label.enabled = true;
+        label.enableWrapText = false;
+        label.overflow = Label.Overflow.SHRINK;
+        const hit = one.getChildByName('bg')?.getComponent(UITransform);
+        if (hit) label.node.getComponent(UITransform)!.setContentSize(hit.width * .84, hit.height * .72);
+        label.spacingX = label.fontSize * .11;
         this.prefabStartSweep = label.node.getComponent(TextSweep) ?? label.node.addComponent(TextSweep);
+        this.prefabStartSweep.renderBaseWithLabel = true;
+        label.node.active = true;
       }
       this.prefabStartButton = this.bindPrefabButton(one, () => this.activateMainButton());
     }
@@ -329,17 +400,16 @@ export class HomeController extends Component {
   }
 
   private refreshPrefabStart(): void {
+    if (this.packBrowser && !this.packBrowser.isLife) { this.refreshBrowseChrome(); return; }
     if (!this.bottomPrefab) return;
-    const remaining = this.pack ? countAvailableSlots(this.pack) : 0;
-    if (this.prefabStartLabel) {
-      this.prefabStartLabel.string = !this.pack ? '烟盒不可用' : remaining > 0 ? '来一根' : '补一盒';
-    }
     if (this.prefabStartButton) this.prefabStartButton.interactable = !!this.pack
       && !this.lidAnimating && !this.entryMode;
     this.refreshMainButtonText();
   }
 
   private activateMainButton(): void {
+    if (this.browseBlocked() || this.packBrowser?.animating) return;
+    if (this.packBrowser && !this.packBrowser.isLife) { this.packBrowser.activate(); return; }
     if (this.entryMode || this.lidAnimating || !this.pack) return;
     if (countAvailableSlots(this.pack) === 0) {
       this.onSupply?.();
@@ -391,7 +461,7 @@ export class HomeController extends Component {
     const switchPack = side.getChildByName('record3') ?? side.getChildByName('record-002');
     this.bindPrefabButton(record, () => this.activateRecords());
     this.bindPrefabButton(lab, () => this.activateLab());
-    this.bindPrefabButton(switchPack);
+    this.bindPrefabButton(switchPack, () => this.activatePackSelect());
     const today = side.getChildByName('record4') ?? side.getChildByName('record-003');
     this.prefabRecordLock = record?.getChildByName('suo') ?? null;
     this.prefabLabLock = lab?.getChildByName('suo') ?? null;
@@ -474,9 +544,10 @@ export class HomeController extends Component {
     this.workspaceRoot.setScale(1, workspaceScale, 1);
     this.packRoot.setScale(
       HomeController.PACK_DISPLAY_WIDTH / HomeController.PACK_BOX_WIDTH,
-      HomeController.PACK_DISPLAY_HEIGHT / HomeController.PACK_BOX_HEIGHT / workspaceScale,
+      HomeController.PACK_DISPLAY_HEIGHT / HomeController.PACK_BOX_HEIGHT / (this.packBrowser ? 1 : workspaceScale),
       1);
-    this.packRoot.setPosition(HomeController.PACK_POSITION_X,
+    if (this.packBrowser) this.packRoot.setPosition(0, 0);
+    else this.packRoot.setPosition(HomeController.PACK_POSITION_X,
       (HomeController.PACK_POSITION_Y - this.contentRoot.position.y
         - this.workspaceRoot.position.y) / workspaceScale, 0);
     cursor -= workbenchHeight;
@@ -499,6 +570,32 @@ export class HomeController extends Component {
       }
     }
     this.refreshTypography(workspaceScale, noticeScale, quickScale, startScale);
+    if (this.packBrowser) this.layoutPackNavigation();
+  }
+
+  private layoutPackNavigation(): void {
+    const width = view.getVisibleSize().width, unit = width / 375;
+    const narrow = screen.windowSize.width / (screen.devicePixelRatio || 1) <= 340;
+    const padding = (narrow ? 9 : 12) * unit;
+    const columnWidth = (width - 2 * padding) * (narrow ? .605 : .615);
+    this.packBrowser!.resize(columnWidth);
+    const height = 44 * unit, arrowSize = height;
+    // The fixed home artwork and authored bottom prefab must not use the discarded footer's flex cursor.
+    let y = HomeController.PACK_POSITION_Y - HomeController.PACK_DISPLAY_HEIGHT * .46 - 4 * unit - height / 2;
+    const quote = this.bottomPrefab?.getChildByName('线下慢慢来，这一口留在屏幕里')?.getComponent(UITransform);
+    if (quote) {
+      const rect = quote.getBoundingBoxToWorld();
+      const top = this.node.getComponent(UITransform)!.convertToNodeSpaceAR(new Vec3(rect.xMin, rect.yMax, 0)).y;
+      y = Math.max(y, top + (16.5 / 2 + 4) * unit);
+    }
+    this.packNavigation.setPosition(-width / 2 + padding + columnWidth / 2, y);
+    this.packNavigation.getComponent(UITransform)!.setContentSize(columnWidth, height);
+    this.packSwitchArrows.forEach((arrow, index) => {
+      arrow.getComponent(UITransform)!.setContentSize(arrowSize, height);
+      arrow.setPosition((index === 0 ? -1 : 1) * (columnWidth - arrowSize) / 2, 0);
+    });
+    this.packSwitchCaption.fontSize = 11 * unit; this.packSwitchCaption.lineHeight = 16.5 * unit;
+    this.packSwitchCaption.node.getComponent(UITransform)!.setContentSize(columnWidth - 2 * arrowSize, height);
   }
 
   private refreshTypography(workspaceScale: number, noticeScale: number,
@@ -829,6 +926,7 @@ export class HomeController extends Component {
   }
 
   public defaultSlot(): number {
+    if (this.packBrowser && !this.packBrowser.isLife) return -1;
     if (!this.pack) return -1;
     if (this.pack.slots[this.selectedSlot] === 'available') return this.selectedSlot;
     return this.pack.slots.findIndex((slot) => slot === 'available');
@@ -857,13 +955,13 @@ export class HomeController extends Component {
     }
     this.startButton.interactable = !!pack && !this.lidAnimating;
     this.refreshPrefabStart();
-    this.startButtonLabel.string = pack === null ? '烟盒不可用' : remaining > 0 ? '来一根' : '补一盒';
     const cssWidth = screen.windowSize.width / (screen.devicePixelRatio || 1);
     this.startButtonLabel.fontSize = (pack === null ? 46 : 62)
       * cssWidth / 750 * this.cssPixelScale();
     this.startButtonLabel.lineHeight = this.startButtonLabel.fontSize * 1.05;
     this.refreshMainButtonText();
     this.refreshSlotVisibility();
+    this.packBrowser?.refresh();
   }
 
   public setSmokedCount(_count: number | null): void {
@@ -940,6 +1038,7 @@ export class HomeController extends Component {
   }
 
   private beginOpenLid(extractAfterOpen: boolean): void {
+    if (this.browseBlocked() || this.packBrowser?.animating || (this.packBrowser && !this.packBrowser.isLife)) return;
     if (this.entryMode || this.lidAnimating || !this.pack || this.pack.lidOpen) {
       if (extractAfterOpen && this.pack?.lidOpen) this.startDefaultSlot();
       return;
@@ -982,6 +1081,7 @@ export class HomeController extends Component {
   }
 
   private startDefaultSlot(): void {
+    if (this.browseBlocked() || this.packBrowser?.animating || (this.packBrowser && !this.packBrowser.isLife)) return;
     if (this.entryMode || this.lidAnimating || !this.pack?.lidOpen) return;
     const slot = this.defaultSlot();
     if (slot >= 0) this.onStart?.(slot);
@@ -1026,6 +1126,7 @@ export class HomeController extends Component {
   }
 
   public getExtractionSource(slotIndex: number, target: Node): ExtractionSource | null {
+    if (this.packBrowser?.animating || (this.packBrowser && !this.packBrowser.isLife)) return null;
     if (!this.pack?.lidOpen || this.lidAnimating || this.pack.slots[slotIndex] !== 'available') return null;
     const slot = this.slots[slotIndex];
     const targetTransform = target.getComponent(UITransform);
@@ -1323,11 +1424,22 @@ export class HomeController extends Component {
   }
 
   private refreshMainButtonText(): void {
-    const playing = !!this.pack && !this.entryMode && !this.lidAnimating;
+    const copy = this.mainButtonCopy();
+    if (this.startButtonLabel) this.startButtonLabel.string = copy;
+    if (this.prefabStartLabel) this.prefabStartLabel.string = copy;
+    const playing = !!this.pack && !this.entryMode && !this.lidAnimating && !this.packBrowser?.animating;
     for (const effect of [this.startTextSweep, this.prefabStartSweep]) {
       effect?.setPlaying(playing);
       effect?.refresh();
     }
+  }
+
+  private mainButtonCopy(): string {
+    const busy = this.entryMode || this.lidAnimating;
+    if (this.packBrowser?.current && !this.packBrowser.isLife) return homePackAction(this.packBrowser.current, busy);
+    if (busy) return '正在抽出';
+    // A failed local read is not evidence of an empty pack. Keep the legacy default copy, with the action disabled.
+    return this.pack && countAvailableSlots(this.pack) === 0 ? '补一盒' : '来一根';
   }
 
   private buildStartArrows(parent: Node): void {
@@ -1505,6 +1617,7 @@ export class HomeController extends Component {
         0, deckHeight / 2 - exposedHeight / 2);
       hitRegion.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
         event.propagationStopped = true;
+        if (this.browseBlocked() || this.packBrowser?.animating || (this.packBrowser && !this.packBrowser.isLife)) return;
         if (this.entryMode || this.lidAnimating || !this.pack?.lidOpen
           || this.pack.slots[index] !== 'available') return;
         this.selectedSlot = index;
@@ -1569,33 +1682,15 @@ export class HomeController extends Component {
   private addPackSkin(parent: Node, viewportWidth: number, viewportHeight: number,
     widthScale: number, heightScale: number, name: string, align: 'top' | 'bottom',
     horizontalAlign: 'left' | 'right' = 'left'): void {
-    const viewport = createNode(`${name}Viewport`, parent, viewportWidth, viewportHeight);
-    const skinMask = viewport.addComponent(Mask);
-    skinMask.type = Mask.Type.GRAPHICS_STENCIL;
-    const stencil = skinMask.subComp as Graphics;
-    stencil.rect(-viewportWidth / 2, -viewportHeight / 2, viewportWidth, viewportHeight);
-    stencil.fill();
-    const skinWidth = viewportWidth * widthScale;
-    const skinHeight = viewportHeight * heightScale;
-    const skinY = align === 'bottom'
-      ? (skinHeight - viewportHeight) / 2
-      : (viewportHeight - skinHeight) / 2;
-    const skinX = horizontalAlign === 'left'
-      ? (skinWidth - viewportWidth) / 2
-      : (viewportWidth - skinWidth) / 2;
-    const spriteNode = createNode(name, viewport, skinWidth, skinHeight, skinX, skinY);
-    const sprite = spriteNode.addComponent(Sprite);
-    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+    const sprite = createPackSkin(parent, viewportWidth, viewportHeight,
+      widthScale, heightScale, name, align, horizontalAlign);
     resources.load(AssetCatalog.wangXiSkin, SpriteFrame, (error, frame) => {
       if (!error && frame && sprite.isValid) sprite.spriteFrame = frame;
     });
   }
 
   private applyPackCopyShadow(label: Label): void {
-    label.enableShadow = true;
-    label.shadowColor = color('#f0dfb5', 185);
-    label.shadowOffset.set(0, -2);
-    label.shadowBlur = 5;
+    applyPackCopyShadow(label);
   }
 
   /** WangXi/life pack's visible filter, transcribed from pack-box.wxss materials. */
@@ -1902,6 +1997,7 @@ export class HomeController extends Component {
     const drawArrow = (name: string, x: number, previous: boolean): void => {
       const arrow = createNode(name, navigation, 88, 88, x);
       arrow.addComponent(Button).transition = Button.Transition.NONE;
+      UIButton.bind(arrow, () => this.packBrowser?.browse(previous ? -1 : 1));
       this.packSwitchArrows.push(arrow);
       const mark = arrow.addComponent(Graphics);
       mark.strokeColor = color('#c2b590');
@@ -1913,7 +2009,7 @@ export class HomeController extends Component {
     };
     drawArrow('PreviousPack', -168, true);
     this.packSwitchCaption = createLabel('PackSwitchCaption', navigation,
-      '左右滑动换一盒 · 1 / 1', 22, '#b0b6ab', 248, 44);
+      '左右滑动换一盒 · 1 / 8', 22, '#b0b6ab', 248, 44);
     // Keep the old single-line hint inside the flexible space between 44px arrows.
     this.packSwitchCaption.overflow = Label.Overflow.SHRINK;
     this.packSwitchCaption.enableWrapText = false;
@@ -1927,6 +2023,7 @@ export class HomeController extends Component {
     if (iconKind !== 'today') card.addComponent(Button).transition = Button.Transition.NONE;
     if (iconKind === 'records') UIButton.bind(card, () => this.activateRecords());
     if (iconKind === 'lab') UIButton.bind(card, () => this.activateLab());
+    if (iconKind === 'switch') UIButton.bind(card, () => this.activatePackSelect());
     const frame = card.addComponent(Graphics);
     this.paintInfoCardFrame(frame, height, iconKind === 'gift');
     const todayHeaderY = height / 2 - 46;
